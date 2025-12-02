@@ -12,5 +12,5 @@ extern "C" {
 #[wasm_bindgen]
 pub fn init_core() {
     console_error_panic_hook::set_once();
-    log("MANIFOLD ENGINE: Core Loaded.");
+    log("MANIFOLD ENGINE: Recursive Core Online.");
 }

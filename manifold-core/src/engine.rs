@@ -4,61 +4,54 @@ use wasm_bindgen::prelude::*;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Topology {
     Classic9x9,
+    Cube486, 
 }
-
-// Use a static allocation to avoid memory issues
-const GRID_SIZE: usize = 81;
 
 #[wasm_bindgen]
 pub struct ManifoldEngine {
-    cells: [u8; GRID_SIZE],
-    fixed: [bool; GRID_SIZE], // Track initial puzzle cells (immutable)
+    cells: Vec<u8>,              
+    fixed: Vec<bool>,            
+    constraints: Vec<Vec<usize>>, 
 }
 
 #[wasm_bindgen]
 impl ManifoldEngine {
-    pub fn new(_topo: Topology) -> ManifoldEngine {
+    pub fn new(topo: Topology) -> ManifoldEngine {
+        let (cells, constraints) = match topo {
+            Topology::Classic9x9 => generate_classic_9x9(),
+            Topology::Cube486 => generate_empty_graph(486),
+        };
+
         ManifoldEngine {
-            cells: [0; GRID_SIZE],
-            fixed: [false; GRID_SIZE],
+            fixed: vec![false; cells.len()],
+            cells,
+            constraints,
         }
     }
 
-    // --- CRITICAL FOR JS BRIDGE (PHASE 4.0) ---
-    /// Export entire grid in one WASM call (not 81x calls to get_cell!)
     pub fn get_grid(&self) -> Vec<u8> {
-        self.cells.to_vec()
+        self.cells.clone()
     }
 
-    /// Export fixed cells metadata for UI (greyed out in UI)
-    /// Returns Vec<u8> where 1 = fixed, 0 = editable (wasm-bindgen limitation)
     pub fn get_fixed_cells(&self) -> Vec<u8> {
         self.fixed.iter().map(|&b| if b { 1 } else { 0 }).collect()
     }
 
-    /// Check if a cell is immutable (part of initial puzzle)
-    pub fn is_fixed(&self, index: usize) -> bool {
-        if index < GRID_SIZE { self.fixed[index] } else { false }
-    }
-    // -------------------------------------------
-
-    pub fn get_cell(&self, index: usize) -> u8 {
-        if index < GRID_SIZE {
-            self.cells[index]
-        } else {
-            0
+    pub fn load_puzzle(&mut self, puzzle: Vec<u8>) -> bool {
+        if puzzle.len() != self.cells.len() {
+            return false;
         }
+        
+        for i in 0..self.cells.len() {
+            self.cells[i] = puzzle[i];
+            self.fixed[i] = puzzle[i] != 0;
+        }
+        true
     }
 
     pub fn set_cell(&mut self, index: usize, value: u8) -> bool {
-        if index >= GRID_SIZE || value > 9 {
-            return false;
-        }
-
-        // Prevent modification of fixed cells
-        if self.fixed[index] {
-            return false;
-        }
+        if index >= self.cells.len() || value > 9 { return false; }
+        if self.fixed[index] { return false; }
 
         if value == 0 {
             self.cells[index] = 0;
@@ -69,109 +62,55 @@ impl ManifoldEngine {
             self.cells[index] = value;
             return true;
         }
-
         false
     }
 
     pub fn is_safe(&self, index: usize, value: u8) -> bool {
-        if index >= GRID_SIZE {
-            return false;
-        }
-
-        let row = index / 9;
-        let col = index % 9;
-        let box_row = (row / 3) * 3;
-        let box_col = (col / 3) * 3;
-
-        // Check row
-        for c in 0..9 {
-            let idx = row * 9 + c;
-            if idx != index && self.cells[idx] == value {
+        for &neighbor_idx in &self.constraints[index] {
+            if self.cells[neighbor_idx] == value {
                 return false;
             }
         }
-
-        // Check column
-        for r in 0..9 {
-            let idx = r * 9 + col;
-            if idx != index && self.cells[idx] == value {
-                return false;
-            }
-        }
-
-        // Check 3x3 box
-        for r in box_row..(box_row + 3) {
-            for c in box_col..(box_col + 3) {
-                let idx = r * 9 + c;
-                if idx != index && self.cells[idx] == value {
-                    return false;
-                }
-            }
-        }
-
         true
     }
 
     pub fn reset(&mut self) {
-        // Only clear non-fixed cells (preserve initial puzzle)
-        for i in 0..GRID_SIZE {
-            if !self.fixed[i] {
-                self.cells[i] = 0;
-            }
-        }
-    }
-
-    pub fn load_puzzle(&mut self, puzzle: Vec<u8>) {
-        if puzzle.len() != GRID_SIZE {
-            return;
-        }
-        
-        self.cells = puzzle.try_into().unwrap_or([0; GRID_SIZE]);
-        
-        for i in 0..GRID_SIZE {
-            self.fixed[i] = self.cells[i] != 0;
+        for i in 0..self.cells.len() {
+            if !self.fixed[i] { self.cells[i] = 0; }
         }
     }
 
     pub fn solve(&mut self) -> bool {
-        // Simpler recursive approach with optimized memory
         self.solve_recursive()
     }
 
     fn solve_recursive(&mut self) -> bool {
-        // Find empty cell with minimum remaining values heuristic
         let mut best_cell: Option<usize> = None;
         let mut min_options = 10;
 
-        for i in 0..GRID_SIZE {
+        for i in 0..self.cells.len() {
             if self.cells[i] == 0 {
                 let mut options = 0;
                 for val in 1..=9 {
-                    if self.is_safe(i, val) {
-                        options += 1;
-                    }
+                    if self.is_safe(i, val) { options += 1; }
                 }
 
-                if options == 0 {
-                    return false;
-                }
-
+                if options == 0 { return false; }
                 if options < min_options {
                     min_options = options;
                     best_cell = Some(i);
+                    if min_options == 1 { break; }
                 }
             }
         }
 
         match best_cell {
-            None => true, // All cells filled
+            None => true, 
             Some(idx) => {
                 for val in 1..=9 {
                     if self.is_safe(idx, val) {
                         self.cells[idx] = val;
-                        if self.solve_recursive() {
-                            return true;
-                        }
+                        if self.solve_recursive() { return true; }
                         self.cells[idx] = 0;
                     }
                 }
@@ -179,4 +118,39 @@ impl ManifoldEngine {
             }
         }
     }
+}
+
+
+fn generate_empty_graph(size: usize) -> (Vec<u8>, Vec<Vec<usize>>) {
+    (vec![0; size], vec![vec![]; size])
+}
+
+fn generate_classic_9x9() -> (Vec<u8>, Vec<Vec<usize>>) {
+    let size = 81;
+    let cells = vec![0; size];
+    let mut constraints = vec![vec![]; size];
+
+    for i in 0..size {
+        let row = i / 9;
+        let col = i % 9;
+        let box_r = (row / 3) * 3;
+        let box_c = (col / 3) * 3;
+
+        for k in 0..9 {
+            let r_idx = row * 9 + k;
+            if r_idx != i { constraints[i].push(r_idx); }
+
+            let c_idx = k * 9 + col;
+            if c_idx != i { constraints[i].push(c_idx); }
+
+            let b_r = box_r + (k / 3);
+            let b_c = box_c + (k % 3);
+            let b_idx = b_r * 9 + b_c;
+            if b_idx != i { constraints[i].push(b_idx); }
+        }
+        
+        constraints[i].sort_unstable();
+        constraints[i].dedup();
+    }
+    (cells, constraints)
 }

@@ -1,127 +1,136 @@
 import { create } from 'zustand';
-import { ManifoldEngine, Topology, init_core } from '../manifold-wasm/manifold_core';
-import init from '../manifold-wasm/manifold_core';
-import { puzzles, Puzzle, getRandomPuzzle } from '../examples/puzzles';
+import initWasm, { ManifoldEngine, Topology, init_core } from '../manifold-wasm/manifold_core';
+import { getRandomPuzzle } from '../examples/puzzles';
 
 let engineInstance: ManifoldEngine | null = null;
-let wasmInitialized = false;
+let isInitializing = false; 
+let isWasmLoaded = false; 
+
+export type VisualTopology = 'GRID' | 'TORUS' | 'CUBE';
 
 interface GameState {
   grid: Uint8Array;
-  status: 'LOADING' | 'READY' | 'SOLVED' | 'IMPOSSIBLE' | 'INVALID';
+  fixed: Uint8Array;
+  status: 'LOADING' | 'READY' | 'SOLVED' | 'IMPOSSIBLE';
   selectedCell: number | null;
-  lastErrorTime: number;
-  currentPuzzle: Puzzle | null;
-  availablePuzzles: Puzzle[];
+  errorCell: number | null;
+  visualTopology: VisualTopology;
+  currentPuzzleName: string;
   
   init: () => Promise<void>;
   selectCell: (index: number | null) => void;
   setCell: (value: number) => void;
-  loadExample: () => void;
-  loadPuzzle: (puzzle: Puzzle) => void;
-  solve: () => void;
+  loadRandomPuzzle: () => void;
   reset: () => void;
-}
-
-function buildGridFromEngine(engine: ManifoldEngine): Uint8Array {
-  const grid = new Uint8Array(81);
-  for (let i = 0; i < 81; i++) {
-    grid[i] = engine.get_cell(i);
-  }
-  return grid;
+  solve: () => void;
+  setTopology: (topo: VisualTopology) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
   grid: new Uint8Array(81),
+  fixed: new Uint8Array(81),
   status: 'LOADING',
   selectedCell: null,
-  lastErrorTime: 0,
-  currentPuzzle: null,
-  availablePuzzles: puzzles,
+  errorCell: null,
+  visualTopology: 'GRID',
+  currentPuzzleName: '',
 
   init: async () => {
-    try {
-      if (!wasmInitialized) {
-        await init();
-        wasmInitialized = true;
-      }
-      init_core();
-      engineInstance = ManifoldEngine.new(Topology.Classic9x9);
-      const randomPuzzle = getRandomPuzzle();
-      
-      for (let i = 0; i < randomPuzzle.grid.length; i++) {
-        if (randomPuzzle.grid[i] !== 0) {
-          engineInstance.set_cell(i, randomPuzzle.grid[i]);
+    if (isWasmLoaded || isInitializing) {
+        if (engineInstance) {
+            set({ status: 'READY' });
         }
-      }
+        return;
+    }
+
+    isInitializing = true;
+
+    try {
+      console.log("MANIFOLD: Starting Wasm Init...");
+      await initWasm();
+      init_core();
+      isWasmLoaded = true;
       
-      set({ 
-        grid: buildGridFromEngine(engineInstance), 
-        status: 'READY',
-        currentPuzzle: randomPuzzle
-      });
+      engineInstance = ManifoldEngine.new(Topology.Classic9x9);
+      
+      const puzzle = getRandomPuzzle();
+      const loaded = engineInstance.load_puzzle(new Uint8Array(puzzle.grid));
+      
+      if (loaded) {
+          set({ 
+              grid: engineInstance.get_grid(), 
+              fixed: engineInstance.get_fixed_cells(),
+              currentPuzzleName: `${puzzle.name} (${puzzle.difficulty})`,
+              status: 'READY' 
+          });
+          console.log("MANIFOLD: Engine Ready.");
+      } else {
+          console.error(" MANIFOLD: Failed to load initial puzzle.");
+      }
+
     } catch (e) {
-      console.error("WASM Load Error", e);
+      console.error("MANIFOLD: Critical Wasm Error", e);
+      set({ status: 'IMPOSSIBLE' });
+    } finally {
+        isInitializing = false;
     }
   },
 
-  selectCell: (index) => set({ selectedCell: index }),
+  selectCell: (index) => set({ selectedCell: index, errorCell: null }),
 
   setCell: (value) => {
-    const { selectedCell, status } = get();
-    if (!engineInstance || selectedCell === null || status !== 'READY') return;
+    const { status, selectedCell } = get();
+    if (!engineInstance || status === 'SOLVED' || selectedCell === null) return;
     
-    const isValid = engineInstance.set_cell(selectedCell, value);
+    if (selectedCell < 0) return;
+
+    const engineIndex = selectedCell % 81;
     
-    if (isValid || value === 0) {
-      set({ grid: buildGridFromEngine(engineInstance) });
-    } else {
-      set({ status: 'INVALID', lastErrorTime: Date.now() });
-      
-      setTimeout(() => {
-        set({ status: 'READY' });
-      }, 600);
+    try {
+        const isValid = engineInstance.set_cell(engineIndex, value);
+        if (isValid) {
+           set({ grid: engineInstance.get_grid(), errorCell: null });
+        } else {
+           set({ errorCell: selectedCell });
+           setTimeout(() => set({ errorCell: null }), 400);
+        }
+    } catch (e) {
+        console.error("Rust Panic caught in JS:", e);
     }
   },
 
-  loadExample: () => {
-    const randomPuzzle = getRandomPuzzle();
-    const { loadPuzzle } = get();
-    loadPuzzle(randomPuzzle);
-  },
-
-  loadPuzzle: (puzzle: Puzzle) => {
+  loadRandomPuzzle: () => {
     if (!engineInstance) return;
-    engineInstance.reset();
-    
-    for (let i = 0; i < puzzle.grid.length; i++) {
-      if (puzzle.grid[i] !== 0) {
-        engineInstance.set_cell(i, puzzle.grid[i]);
-      }
-    }
-    
-    set({ 
-      grid: buildGridFromEngine(engineInstance), 
-      status: 'READY', 
-      selectedCell: null,
-      currentPuzzle: puzzle
-    });
-  },
-
-  solve: () => {
-    if (!engineInstance) return;
-    const result = engineInstance.solve();
-    
-    if (result) {
-      set({ grid: buildGridFromEngine(engineInstance), status: 'SOLVED' });
-    } else {
-      set({ status: 'IMPOSSIBLE' });
+    const puzzle = getRandomPuzzle();
+    if(engineInstance.load_puzzle(new Uint8Array(puzzle.grid))) {
+        set({ 
+            grid: engineInstance.get_grid(), 
+            fixed: engineInstance.get_fixed_cells(),
+            currentPuzzleName: `${puzzle.name} (${puzzle.difficulty})`,
+            status: 'READY',
+            errorCell: null
+        });
     }
   },
 
   reset: () => {
     if (!engineInstance) return;
     engineInstance.reset();
-    set({ grid: buildGridFromEngine(engineInstance), status: 'READY', selectedCell: null });
-  }
+    set({ grid: engineInstance.get_grid(), status: 'READY', errorCell: null });
+  },
+
+  solve: () => {
+    if (!engineInstance) return;
+    const start = performance.now();
+    const result = engineInstance.solve();
+    console.log(`Solved in ${(performance.now() - start).toFixed(2)}ms`);
+
+    if (result) {
+        set({ grid: engineInstance.get_grid(), status: 'SOLVED', errorCell: null });
+    } else {
+        set({ status: 'IMPOSSIBLE' });
+    }
+  },
+
+  setTopology: (topo) => set({ visualTopology: topo })
 }));

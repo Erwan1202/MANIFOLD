@@ -1,77 +1,86 @@
 import { useEffect } from 'react';
-import { useGameStore } from './store/gameStore';
+import { useGameStore, VisualTopology } from './store/gameStore';
 import { Scene3D } from './components/Scene3D';
 
 function App() {
-  const { init, status, solve, reset, loadExample, setCell } = useGameStore();
+  const { 
+    init, status, loadRandomPuzzle, reset, solve, setCell, 
+    visualTopology, setTopology, currentPuzzleName 
+  } = useGameStore();
 
   useEffect(() => { init(); }, []);
-
+  
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (status === 'LOADING') return;
       const num = parseInt(e.key);
       if (!isNaN(num) && num >= 1 && num <= 9) setCell(num);
       if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') setCell(0);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [status, setCell]);
+  }, [setCell]);
 
   const btnStyle = {
-    padding: '10px 20px',
-    margin: '0 5px',
-    border: 'none',
+    padding: '8px 12px', 
+    margin: '0 4px', 
+    border: '1px solid #333',
     borderRadius: '4px',
-    cursor: 'pointer',
-    fontFamily: 'monospace',
-    fontWeight: 'bold' as const,
+    cursor: 'pointer', 
+    fontFamily: 'monospace', 
+    fontWeight: 'bold', 
     textTransform: 'uppercase' as const,
+    color: '#e5e5e5', 
+    fontSize: '11px', 
+    background: '#171717', 
+    transition: 'all 0.2s'
+  };
+
+  const activeBtnStyle = { 
+    ...btnStyle, 
+    background: '#2563eb', 
+    border: '1px solid #2563eb', 
+    color: 'white' 
   };
 
   return (
-    <div style={{ 
-      width: '100vw', 
-      height: '100vh', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      background: '#0a0a0a', 
-      color: 'white',
-      fontFamily: 'monospace',
-      overflow: 'hidden',
-    }}>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-      `}</style>
-      <header style={{ padding: '20px', textAlign: 'center', flex: '0 0 auto' }}>
-        <h1 style={{ margin: '0 0 0.5rem 0', color: '#3b82f6', fontSize: '2.5rem' }}>
-          MANIFOLD ENGINE
-        </h1>
-        <p style={{ margin: 0, color: '#666', fontSize: '0.8rem' }}>
-          SPATIAL CONSTRAINT SOLVER
-        </p>
+    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', background: '#000', overflow: 'hidden' }}>
+      
+      <header style={{ padding: '12px 16px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10, background: '#0a0a0a' }}>
+        <div>
+          <h1 style={{ margin: 0, color: '#fff', fontSize: '1.2rem', letterSpacing: '-0.05em' }}>
+            MANIFOLD <span style={{ color: '#2563eb' }}>ENGINE</span>
+          </h1>
+          <div style={{ fontSize: '10px', color: '#666', marginTop: '2px', fontFamily: 'monospace' }}>
+            {currentPuzzleName}
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '4px' }}>
+            {(['GRID', 'TORUS', 'CUBE'] as VisualTopology[]).map(t => (
+                <button 
+                    key={t}
+                    onClick={() => setTopology(t)}
+                    style={visualTopology === t ? activeBtnStyle : btnStyle}
+                >
+                    {t}
+                </button>
+            ))}
+        </div>
+
+        <div style={{ fontSize: '10px', fontFamily: 'monospace', color: status === 'SOLVED' ? '#22c55e' : '#666' }}>
+             STATUS: {status}
+        </div>
       </header>
 
-      <div style={{ flex: '1 1 auto', minHeight: 0, padding: '20px' }}>
-        <Scene3D />
+      <div style={{ flex: 1, position: 'relative', width: '100%', minHeight: 0 }}>
+         <Scene3D />
       </div>
-      <div style={{ padding: '20px', textAlign: 'center', flex: '0 0 auto' }}>
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '15px' }}>
-          <button onClick={loadExample} style={{ ...btnStyle, background: '#333', color: '#fff' }}>Load Example</button>
-          <button onClick={solve} disabled={status !== 'READY'} style={{ ...btnStyle, background: status !== 'READY' ? '#555' : '#2563eb', color: '#fff' }}>SOLVE (WASM)</button>
-          <button onClick={reset} style={{ ...btnStyle, background: '#7f1d1d', color: '#fff' }}>Reset</button>
-        </div>
-        {status === 'INVALID' && (<div style={{ color: '#ff0000', fontWeight: 'bold', animation: 'pulse 0.6s infinite' }}>❌ Invalid Move</div>)}
-        {status === 'SOLVED' && (<div style={{ color: '#00ff00', fontWeight: 'bold' }}>✓ Puzzle Solved!</div>)}
-        {status === 'IMPOSSIBLE' && (<div style={{ color: '#ff8800', fontWeight: 'bold' }}>⚠ No Solution Found</div>)}
-        <div style={{ color: '#444', fontSize: '12px', marginTop: '10px' }}>Rotate: Left Click | Zoom: Scroll | Status: {status}</div>
+
+      <div style={{ padding: '16px', borderTop: '1px solid #333', background: '#0a0a0a', zIndex: 10, textAlign: 'center' }}>
+            <button onClick={loadRandomPuzzle} style={btnStyle}>RANDOM PUZZLE</button>
+            <button onClick={reset} style={{ ...btnStyle, color: '#ef4444', border: '1px solid #7f1d1d' }}>RESET</button>
+            <div style={{ display: 'inline-block', width: '20px' }}></div>
+            <button onClick={solve} style={{ ...btnStyle, color: '#2563eb', border: '1px solid #2563eb' }}>⚡ SOLVE</button>
       </div>
     </div>
   );
