@@ -3,8 +3,8 @@ import initWasm, { ManifoldEngine, Topology, init_core } from '../manifold-wasm/
 import { getRandomPuzzle } from '../examples/puzzles';
 
 let engineInstance: ManifoldEngine | null = null;
-let isInitializing = false; 
-let isWasmLoaded = false; 
+let isInitializing = false;
+let isWasmLoaded = false;
 
 export type VisualTopology = 'GRID' | 'TORUS' | 'CUBE';
 
@@ -26,9 +26,23 @@ interface GameState {
   setTopology: (topo: VisualTopology) => void;
 }
 
+const generateCubeData = () => {
+    const fullData = new Uint8Array(486);
+    const names = [];
+    
+    for(let face=0; face<6; face++) {
+        const p = getRandomPuzzle();
+        names.push(p.name);
+        for(let i=0; i<81; i++) {
+            fullData[face * 81 + i] = p.grid[i];
+        }
+    }
+    return { data: fullData, name: "Cube: " + names[0] + "..." };
+};
+
 export const useGameStore = create<GameState>((set, get) => ({
-  grid: new Uint8Array(81),
-  fixed: new Uint8Array(81),
+  grid: new Uint8Array(486),
+  fixed: new Uint8Array(486),
   status: 'LOADING',
   selectedCell: null,
   errorCell: null,
@@ -37,39 +51,31 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   init: async () => {
     if (isWasmLoaded || isInitializing) {
-        if (engineInstance) {
-            set({ status: 'READY' });
-        }
+        if (engineInstance) set({ status: 'READY' });
         return;
     }
 
     isInitializing = true;
 
     try {
-      console.log("MANIFOLD: Starting Wasm Init...");
       await initWasm();
       init_core();
       isWasmLoaded = true;
       
       engineInstance = ManifoldEngine.new(Topology.Classic9x9);
       
-      const puzzle = getRandomPuzzle();
-      const loaded = engineInstance.load_puzzle(new Uint8Array(puzzle.grid));
+      const { data, name } = generateCubeData();
+      engineInstance.load_puzzle(data);
       
-      if (loaded) {
-          set({ 
-              grid: engineInstance.get_grid(), 
-              fixed: engineInstance.get_fixed_cells(),
-              currentPuzzleName: `${puzzle.name} (${puzzle.difficulty})`,
-              status: 'READY' 
-          });
-          console.log("MANIFOLD: Engine Ready.");
-      } else {
-          console.error(" MANIFOLD: Failed to load initial puzzle.");
-      }
+      set({ 
+          grid: engineInstance.get_grid(), 
+          fixed: engineInstance.get_fixed_cells(),
+          currentPuzzleName: name,
+          status: 'READY' 
+      });
 
     } catch (e) {
-      console.error("MANIFOLD: Critical Wasm Error", e);
+      console.error(e);
       set({ status: 'IMPOSSIBLE' });
     } finally {
         isInitializing = false;
@@ -82,35 +88,25 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { status, selectedCell } = get();
     if (!engineInstance || status === 'SOLVED' || selectedCell === null) return;
     
-    if (selectedCell < 0) return;
-
-    const engineIndex = selectedCell % 81;
-    
-    try {
-        const isValid = engineInstance.set_cell(engineIndex, value);
-        if (isValid) {
-           set({ grid: engineInstance.get_grid(), errorCell: null });
-        } else {
-           set({ errorCell: selectedCell });
-           setTimeout(() => set({ errorCell: null }), 400);
-        }
-    } catch (e) {
-        console.error("Rust Panic caught in JS:", e);
+    if (engineInstance.set_cell(selectedCell, value)) {
+       set({ grid: engineInstance.get_grid(), errorCell: null });
+    } else {
+       set({ errorCell: selectedCell });
+       setTimeout(() => set({ errorCell: null }), 400);
     }
   },
 
   loadRandomPuzzle: () => {
     if (!engineInstance) return;
-    const puzzle = getRandomPuzzle();
-    if(engineInstance.load_puzzle(new Uint8Array(puzzle.grid))) {
-        set({ 
-            grid: engineInstance.get_grid(), 
-            fixed: engineInstance.get_fixed_cells(),
-            currentPuzzleName: `${puzzle.name} (${puzzle.difficulty})`,
-            status: 'READY',
-            errorCell: null
-        });
-    }
+    const { data, name } = generateCubeData();
+    engineInstance.load_puzzle(data);
+    set({ 
+        grid: engineInstance.get_grid(), 
+        fixed: engineInstance.get_fixed_cells(),
+        currentPuzzleName: name,
+        status: 'READY',
+        errorCell: null
+    });
   },
 
   reset: () => {

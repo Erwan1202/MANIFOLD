@@ -4,54 +4,59 @@ import { Text, OrbitControls, Center, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 
-const Cell3D = ({ position, value, isSelected, isError, onClick, rotation }: any) => {
+const Cell3D = React.memo(({ position, value, isSelected, isError, onClick, rotation }: any) => {
   const mesh = useRef<THREE.Mesh>(null);
-
+  
   useFrame(() => {
     if (!mesh.current) return;
     const targetScale = (isSelected || isError) ? 1.1 : 1;
-    mesh.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.2);
+    mesh.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.3);
   });
 
   const color = useMemo(() => {
-    if (isError) return '#ef4444'; 
-    if (value === 0) return '#171717'; 
-    return '#404040'; 
+    if (isError) return '#ef4444';
+    if (isSelected) return '#2563eb';
+    if (value === 0) return '#171717';
+    return '#404040';
   }, [value, isSelected, isError]);
 
   return (
     <group position={position} rotation={rotation || [0, 0, 0]}>
-      <mesh 
-        ref={mesh}
-        onClick={(e) => { e.stopPropagation(); onClick(); }}
-      >
+      <mesh ref={mesh} onClick={(e) => { e.stopPropagation(); onClick(); }}>
         <boxGeometry args={[0.85, 0.85, 0.2]} />
         <meshStandardMaterial 
-          color={color} 
-          emissive={isError ? '#ef4444' : (isSelected ? '#1d4ed8' : '#000000')}
-          emissiveIntensity={isError ? 1.5 : (isSelected ? 0.5 : 0)}
-          roughness={0.2}
+            color={color} 
+            emissive={isError ? '#ef4444' : (isSelected ? '#1d4ed8' : '#000000')} 
+            emissiveIntensity={isError ? 1.5 : (isSelected ? 0.5 : 0)} 
+            roughness={0.4} 
         />
       </mesh>
       {value !== 0 && (
-        <Text
-          position={[0, 0, 0.15]}
-          fontSize={0.5}
-          color="#ffffff"
-          anchorX="center"
-          anchorY="middle"
+        <Text 
+            position={[0, 0, 0.16]} 
+            fontSize={0.5} 
+            color="#ffffff" 
+            anchorX="center" 
+            anchorY="middle"
+            characters="0123456789"
         >
           {value}
         </Text>
       )}
     </group>
   );
-};
+}, (prev, next) => {
+    return prev.value === next.value && 
+           prev.isSelected === next.isSelected && 
+           prev.isError === next.isError &&
+           prev.position === next.position; 
+});
 
 
-const useLayout = (topology: string, grid: Uint8Array) => {
+const useLayout = (topology: string) => {
   return useMemo(() => {
     const cells = [];
+    const GRID_SIZE = 486; 
     
     if (topology === 'GRID') {
       for (let i = 0; i < 81; i++) {
@@ -62,35 +67,10 @@ const useLayout = (topology: string, grid: Uint8Array) => {
         cells.push({
           pos: [(col - 4) * 1.1 + xGap, (4 - row) * 1.1 - yGap, 0],
           rot: [0, 0, 0],
-          val: grid[i],
           idx: i
         });
       }
     } 
-    else if (topology === 'TORUS') {
-      const rings = 24;
-      const ringSize = 12;
-      const R = 8; 
-      const r = 3; 
-      
-      for (let i = 0; i < rings; i++) {
-        for (let j = 0; j < ringSize; j++) {
-          const u = (i / rings) * Math.PI * 2;
-          const v = (j / ringSize) * Math.PI * 2;
-          const x = (R + r * Math.cos(v)) * Math.cos(u);
-          const y = (R + r * Math.cos(v)) * Math.sin(u);
-          const z = r * Math.sin(v);
-          
-          const linearIdx = (i * ringSize + j) % 81;
-          cells.push({
-            pos: [x, y, z],
-            rot: [0, 0, u + Math.PI/2],
-            val: grid[linearIdx],
-            idx: linearIdx
-          });
-        }
-      }
-    }
     else if (topology === 'CUBE') {
       const size = 5;
       const faces = [
@@ -102,7 +82,7 @@ const useLayout = (topology: string, grid: Uint8Array) => {
         { pos: [0, -size, 0], rot: [Math.PI/2, 0, 0] },
       ];
       
-      faces.forEach((face) => {
+      faces.forEach((face, faceIdx) => {
         for(let i=0; i<81; i++) {
              const row = Math.floor(i / 9);
              const col = i % 9;
@@ -124,45 +104,70 @@ const useLayout = (topology: string, grid: Uint8Array) => {
              dummy.getWorldPosition(finalPos);
              dummy.getWorldQuaternion(finalRot);
              
+             const globalIndex = faceIdx * 81 + i;
              cells.push({
                pos: [finalPos.x, finalPos.y, finalPos.z],
                rot: [new THREE.Euler().setFromQuaternion(finalRot).x, new THREE.Euler().setFromQuaternion(finalRot).y, new THREE.Euler().setFromQuaternion(finalRot).z],
-               val: grid[i],
-               idx: i
+               idx: globalIndex
              });
         }
       });
     }
+    else if (topology === 'TORUS') {
+      const rings = 27;
+      const ringSize = 18;
+      const R = 10; 
+      const r = 4; 
+      
+      for (let i = 0; i < rings; i++) {
+        for (let j = 0; j < ringSize; j++) {
+          const u = (i / rings) * Math.PI * 2;
+          const v = (j / ringSize) * Math.PI * 2;
+          const x = (R + r * Math.cos(v)) * Math.cos(u);
+          const y = (R + r * Math.cos(v)) * Math.sin(u);
+          const z = r * Math.sin(v);
+          
+          const globalIndex = i * ringSize + j;
+          if (globalIndex < GRID_SIZE) {
+            cells.push({
+                pos: [x, y, z],
+                rot: [0, 0, u + Math.PI/2],
+                idx: globalIndex
+            });
+          }
+        }
+      }
+    }
 
     return cells;
-  }, [topology, grid]);
+  }, [topology]); 
 };
 
 export const Scene3D = () => {
   const { grid, visualTopology, selectedCell, selectCell, errorCell } = useGameStore();
-  const layout = useLayout(visualTopology, grid);
+  const layout = useLayout(visualTopology);
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: '60vh', background: '#000' }}>
-      <Canvas camera={{ position: [0, 0, 16], fov: 50 }}>
+      <Canvas dpr={[1, 2]} camera={{ position: [0, 0, 16], fov: 50 }}>
         <color attach="background" args={['#050505']} />
         <ambientLight intensity={0.5} />
         <pointLight position={[10, 10, 10]} intensity={1} />
         <pointLight position={[-10, -10, -10]} intensity={0.5} color="#2563eb" />
-        <Stars count={2000} factor={4} />
-
+        
+        <Stars count={1000} factor={4} fade />
         <OrbitControls enablePan={true} />
         
         <Center>
           <group>
-            {layout.map((cell, i) => (
+            {layout.map((cell) => (
               <Cell3D 
-                key={i}
+                key={cell.idx}
                 position={cell.pos}
                 rotation={cell.rot}
-                value={cell.val}
+                value={grid[cell.idx]}
                 isSelected={selectedCell === cell.idx}
-                isError={errorCell === cell.idx} 
+                isError={errorCell === cell.idx}
                 onClick={() => selectCell(cell.idx)}
               />
             ))}
