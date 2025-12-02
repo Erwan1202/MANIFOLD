@@ -26,18 +26,30 @@ interface GameState {
   setTopology: (topo: VisualTopology) => void;
 }
 
-const generateCubeData = () => {
-    const fullData = new Uint8Array(486);
-    const names = [];
-    
-    for(let face=0; face<6; face++) {
-        const p = getRandomPuzzle();
-        names.push(p.name);
-        for(let i=0; i<81; i++) {
-            fullData[face * 81 + i] = p.grid[i];
+const generateFullTopologyData = () => {
+    const totalSize = 486; 
+    const fullData = new Uint8Array(totalSize);
+    let firstName = "";
+
+    for (let face = 0; face < 6; face++) {
+        const puzzle = getRandomPuzzle();
+        if (face === 0) firstName = puzzle.name; 
+        
+        for (let i = 0; i < 81; i++) {
+            const row = Math.floor(i / 9);
+            const col = i % 9;
+            let val = puzzle.grid[i];
+            const isEdge = row === 0 || row === 8 || col === 0 || col === 8;
+            if (isEdge) val = 0;
+
+            fullData[face * 81 + i] = val;
         }
     }
-    return { data: fullData, name: "Cube: " + names[0] + "..." };
+    
+    return { 
+        data: fullData, 
+        name: `${firstName} (Stitched)` 
+    };
 };
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -62,9 +74,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       init_core();
       isWasmLoaded = true;
       
-      engineInstance = ManifoldEngine.new(Topology.Classic9x9);
+      engineInstance = ManifoldEngine.new(Topology.Cube6Faces);
       
-      const { data, name } = generateCubeData();
+      const { data, name } = generateFullTopologyData();
       engineInstance.load_puzzle(data);
       
       set({ 
@@ -98,7 +110,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   loadRandomPuzzle: () => {
     if (!engineInstance) return;
-    const { data, name } = generateCubeData();
+    const { data, name } = generateFullTopologyData();
     engineInstance.load_puzzle(data);
     set({ 
         grid: engineInstance.get_grid(), 

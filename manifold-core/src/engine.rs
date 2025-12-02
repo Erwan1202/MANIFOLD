@@ -7,25 +7,30 @@ pub enum Topology {
     Cube6Faces,
 }
 
-const GRID_SIZE: usize = 486;
-
 #[wasm_bindgen]
 pub struct ManifoldEngine {
-    cells: [u8; GRID_SIZE],
-    fixed: [bool; GRID_SIZE],
+    cells: Vec<u8>,
+    fixed: Vec<bool>,
+    constraints: Vec<Vec<usize>>,
 }
 
 #[wasm_bindgen]
 impl ManifoldEngine {
-    pub fn new(_topo: Topology) -> ManifoldEngine {
+    pub fn new(topo: Topology) -> ManifoldEngine {
+        let (cells, constraints) = match topo {
+            Topology::Classic9x9 => generate_classic_9x9(),
+            Topology::Cube6Faces => generate_cube_topology(),
+        };
+
         ManifoldEngine {
-            cells: [0; GRID_SIZE],
-            fixed: [false; GRID_SIZE],
+            fixed: vec![false; cells.len()],
+            cells,
+            constraints,
         }
     }
 
     pub fn get_grid(&self) -> Vec<u8> {
-        self.cells.to_vec()
+        self.cells.clone()
     }
 
     pub fn get_fixed_cells(&self) -> Vec<u8> {
@@ -33,15 +38,11 @@ impl ManifoldEngine {
     }
 
     pub fn is_fixed(&self, index: usize) -> bool {
-        if index < GRID_SIZE { self.fixed[index] } else { false }
-    }
-
-    pub fn get_cell(&self, index: usize) -> u8 {
-        if index < GRID_SIZE { self.cells[index] } else { 0 }
+        if index < self.cells.len() { self.fixed[index] } else { false }
     }
 
     pub fn set_cell(&mut self, index: usize, value: u8) -> bool {
-        if index >= GRID_SIZE || value > 9 { return false; }
+        if index >= self.cells.len() || value > 9 { return false; }
         if self.fixed[index] { return false; }
 
         if value == 0 {
@@ -53,44 +54,20 @@ impl ManifoldEngine {
             self.cells[index] = value;
             return true;
         }
-
         false
     }
 
     pub fn is_safe(&self, index: usize, value: u8) -> bool {
-        if index >= GRID_SIZE { return false; }
-
-        let face_idx = index / 81; 
-        let base_idx = face_idx * 81;
-        let local_index = index % 81;
-
-        let row = local_index / 9;
-        let col = local_index % 9;
-        let box_row = (row / 3) * 3;
-        let box_col = (col / 3) * 3;
-
-        for c in 0..9 {
-            let idx = base_idx + (row * 9 + c);
-            if idx != index && self.cells[idx] == value { return false; }
-        }
-
-        for r in 0..9 {
-            let idx = base_idx + (r * 9 + col);
-            if idx != index && self.cells[idx] == value { return false; }
-        }
-
-        for r in box_row..(box_row + 3) {
-            for c in box_col..(box_col + 3) {
-                let idx = base_idx + (r * 9 + c);
-                if idx != index && self.cells[idx] == value { return false; }
+        for &neighbor_idx in &self.constraints[index] {
+            if self.cells[neighbor_idx] == value {
+                return false;
             }
         }
-
         true
     }
 
     pub fn reset(&mut self) {
-        for i in 0..GRID_SIZE {
+        for i in 0..self.cells.len() {
             if !self.fixed[i] { self.cells[i] = 0; }
         }
     }
@@ -102,8 +79,7 @@ impl ManifoldEngine {
                 self.fixed[i] = puzzle[i] != 0;
             }
             return true;
-        } 
-        else if puzzle.len() == 81 {
+        } else if puzzle.len() == 81 {
             for i in 0..81 {
                 self.cells[i] = puzzle[i];
                 self.fixed[i] = puzzle[i] != 0;
@@ -125,7 +101,7 @@ impl ManifoldEngine {
         let mut best_cell: Option<usize> = None;
         let mut min_options = 10;
 
-        for i in 0..GRID_SIZE {
+        for i in 0..self.cells.len() {
             if self.cells[i] == 0 {
                 let mut options = 0;
                 for val in 1..=9 {
@@ -136,6 +112,7 @@ impl ManifoldEngine {
                 if options < min_options {
                     min_options = options;
                     best_cell = Some(i);
+                    if min_options == 1 { break; }
                 }
             }
         }
@@ -154,4 +131,81 @@ impl ManifoldEngine {
             }
         }
     }
+}
+
+fn generate_classic_9x9() -> (Vec<u8>, Vec<Vec<usize>>) {
+    generate_sudoku_constraints(1)
+}
+
+fn generate_cube_topology() -> (Vec<u8>, Vec<Vec<usize>>) {
+    let (cells, mut constraints) = generate_sudoku_constraints(6);
+
+    let mut connect = |face_a: usize, dir_a: usize, face_b: usize, dir_b: usize| {
+        let get_indices = |face: usize, dir: usize| -> Vec<usize> {
+            let base = face * 81;
+            match dir {
+                0 => (0..9).map(|k| base + k).collect(),
+                1 => (0..9).map(|k| base + k * 9 + 8).collect(),
+                2 => (0..9).map(|k| base + 72 + k).collect(),
+                3 => (0..9).map(|k| base + k * 9).collect(),
+                _ => vec![]
+            }
+        };
+
+        let edge_a = get_indices(face_a, dir_a);
+        let edge_b = get_indices(face_b, dir_b);
+
+        for i in 0..9 {
+            let u = edge_a[i];
+            let v = edge_b[i];
+            constraints[u].push(v);
+            constraints[v].push(u);
+        }
+    };
+
+    connect(0, 1, 2, 3);
+    connect(0, 3, 3, 1);
+    connect(0, 0, 4, 2);
+    connect(0, 2, 5, 0);
+
+    connect(1, 3, 2, 1);
+    connect(1, 1, 3, 3);
+    connect(1, 0, 4, 0);
+    connect(1, 2, 5, 2);
+
+    for list in &mut constraints {
+        list.sort_unstable();
+        list.dedup();
+    }
+
+    (cells, constraints)
+}
+
+fn generate_sudoku_constraints(num_faces: usize) -> (Vec<u8>, Vec<Vec<usize>>) {
+    let total_cells = num_faces * 81;
+    let cells = vec![0; total_cells];
+    let mut constraints = vec![vec![]; total_cells];
+
+    for face in 0..num_faces {
+        let base = face * 81;
+        for i in 0..81 {
+            let global_idx = base + i;
+            let row = i / 9;
+            let col = i % 9;
+            let box_r = (row / 3) * 3;
+            let box_c = (col / 3) * 3;
+
+            for k in 0..9 {
+                let r_idx = base + (row * 9 + k);
+                if r_idx != global_idx { constraints[global_idx].push(r_idx); }
+                
+                let c_idx = base + (k * 9 + col);
+                if c_idx != global_idx { constraints[global_idx].push(c_idx); }
+
+                let b_idx = base + (box_r + (k / 3)) * 9 + (box_c + (k % 3));
+                if b_idx != global_idx { constraints[global_idx].push(b_idx); }
+            }
+        }
+    }
+    (cells, constraints)
 }

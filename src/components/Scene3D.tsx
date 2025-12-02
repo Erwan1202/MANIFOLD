@@ -16,8 +16,10 @@ const Cell3D = React.memo(({ position, value, isSelected, isError, onClick, rota
   const color = useMemo(() => {
     if (isError) return '#ef4444';
     if (isSelected) return '#2563eb';
-    if (value === 0) return '#171717';
-    return '#404040';
+    
+    if (value === 0) return '#333333'; 
+    
+    return '#555555';
   }, [value, isSelected, isError]);
 
   return (
@@ -28,7 +30,8 @@ const Cell3D = React.memo(({ position, value, isSelected, isError, onClick, rota
             color={color} 
             emissive={isError ? '#ef4444' : (isSelected ? '#1d4ed8' : '#000000')} 
             emissiveIntensity={isError ? 1.5 : (isSelected ? 0.5 : 0)} 
-            roughness={0.4} 
+            roughness={0.2}
+            metalness={0.1}
         />
       </mesh>
       {value !== 0 && (
@@ -49,14 +52,13 @@ const Cell3D = React.memo(({ position, value, isSelected, isError, onClick, rota
     return prev.value === next.value && 
            prev.isSelected === next.isSelected && 
            prev.isError === next.isError &&
-           prev.position === next.position; 
+           prev.position === next.position;
 });
-
 
 const useLayout = (topology: string) => {
   return useMemo(() => {
     const cells = [];
-    const GRID_SIZE = 486; 
+    const GRID_SIZE = 486;
     
     if (topology === 'GRID') {
       for (let i = 0; i < 81; i++) {
@@ -114,10 +116,10 @@ const useLayout = (topology: string) => {
       });
     }
     else if (topology === 'TORUS') {
-      const rings = 27;
-      const ringSize = 18;
-      const R = 10; 
-      const r = 4; 
+      const rings = 54; 
+      const ringSize = 9; 
+      const R = 12; 
+      const r = 3;  
       
       for (let i = 0; i < rings; i++) {
         for (let j = 0; j < ringSize; j++) {
@@ -140,7 +142,7 @@ const useLayout = (topology: string) => {
     }
 
     return cells;
-  }, [topology]); 
+  }, [topology]);
 };
 
 export const Scene3D = () => {
@@ -149,15 +151,15 @@ export const Scene3D = () => {
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: '60vh', background: '#000' }}>
-      <Canvas dpr={[1, 2]} camera={{ position: [0, 0, 16], fov: 50 }}>
+      <Canvas dpr={[1, 2]} camera={{ position: [0, 0, 18], fov: 50 }}>
         <color attach="background" args={['#050505']} />
-        <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} intensity={1} />
-        <pointLight position={[-10, -10, -10]} intensity={0.5} color="#2563eb" />
+        
+        <ambientLight intensity={0.8} />
+        <pointLight position={[20, 20, 20]} intensity={1.5} />
+        <pointLight position={[-20, -20, -20]} intensity={1} color="#4a90e2" />
         
         <Stars count={1000} factor={4} fade />
         <OrbitControls enablePan={true} />
-        
         <Center>
           <group>
             {layout.map((cell) => (
