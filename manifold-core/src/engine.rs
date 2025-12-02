@@ -1,40 +1,40 @@
 use wasm_bindgen::prelude::*;
-use serde::{Serialize, Deserialize};
 
 #[wasm_bindgen]
-#[derive(PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Topology {
     Classic9x9,
 }
 
+// Use a static allocation to avoid memory issues
+const GRID_SIZE: usize = 81;
+
 #[wasm_bindgen]
 pub struct ManifoldEngine {
-    cells: Vec<u8>,
-    adjacency: Vec<Vec<usize>>,
-    size: usize,
+    cells: [u8; GRID_SIZE],
 }
 
 #[wasm_bindgen]
 impl ManifoldEngine {
-    pub fn new(topo: Topology) -> ManifoldEngine {
-        let (cells, adjacency) = match topo {
-            Topology::Classic9x9 => generate_classic_9x9(),
-        };
-
+    pub fn new(_topo: Topology) -> ManifoldEngine {
         ManifoldEngine {
-            size: cells.len(),
-            cells,
-            adjacency,
+            cells: [0; GRID_SIZE],
         }
     }
 
-    pub fn get_grid(&self) -> Vec<u8> {
-        self.cells.clone()
+    pub fn get_cell(&self, index: usize) -> u8 {
+        if index < GRID_SIZE {
+            self.cells[index]
+        } else {
+            0
+        }
     }
 
     pub fn set_cell(&mut self, index: usize, value: u8) -> bool {
-        if index >= self.size { return false; }
-        
+        if index >= GRID_SIZE || value > 9 {
+            return false;
+        }
+
         if value == 0 {
             self.cells[index] = 0;
             return true;
@@ -44,99 +44,113 @@ impl ManifoldEngine {
             self.cells[index] = value;
             return true;
         }
-        
+
         false
     }
 
     pub fn is_safe(&self, index: usize, value: u8) -> bool {
-        for &neighbor in &self.adjacency[index] {
-            if self.cells[neighbor] == value {
+        if index >= GRID_SIZE {
+            return false;
+        }
+
+        let row = index / 9;
+        let col = index % 9;
+        let box_row = (row / 3) * 3;
+        let box_col = (col / 3) * 3;
+
+        // Check row
+        for c in 0..9 {
+            let idx = row * 9 + c;
+            if idx != index && self.cells[idx] == value {
                 return false;
             }
         }
+
+        // Check column
+        for r in 0..9 {
+            let idx = r * 9 + col;
+            if idx != index && self.cells[idx] == value {
+                return false;
+            }
+        }
+
+        // Check 3x3 box
+        for r in box_row..(box_row + 3) {
+            for c in box_col..(box_col + 3) {
+                let idx = r * 9 + c;
+                if idx != index && self.cells[idx] == value {
+                    return false;
+                }
+            }
+        }
+
         true
     }
 
     pub fn reset(&mut self) {
-        self.cells.fill(0);
+        self.cells = [0; GRID_SIZE];
+    }
+
+    pub fn load_example(&mut self) {
+        // Sudoku "Hard" standard
+        let example: [u8; GRID_SIZE] = [
+            0, 0, 0, 8, 0, 1, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 4, 3, 0,
+            5, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 7, 0, 8, 0, 0,
+            0, 0, 0, 0, 0, 0, 1, 0, 0,
+            0, 2, 0, 0, 3, 0, 0, 0, 0,
+            6, 0, 0, 0, 0, 0, 0, 7, 5,
+            0, 0, 3, 4, 0, 0, 0, 0, 0,
+            0, 0, 0, 2, 0, 0, 6, 0, 0
+        ];
+        self.cells = example;
     }
 
     pub fn solve(&mut self) -> bool {
+        // Simpler recursive approach with optimized memory
         self.solve_recursive()
     }
 
     fn solve_recursive(&mut self) -> bool {
-        let mut best_cell = None;
+        // Find empty cell with minimum remaining values heuristic
+        let mut best_cell: Option<usize> = None;
         let mut min_options = 10;
 
-        for i in 0..self.size {
+        for i in 0..GRID_SIZE {
             if self.cells[i] == 0 {
-                let options = self.count_legal_moves(i);
-                if options == 0 { return false; }
-                
+                let mut options = 0;
+                for val in 1..=9 {
+                    if self.is_safe(i, val) {
+                        options += 1;
+                    }
+                }
+
+                if options == 0 {
+                    return false;
+                }
+
                 if options < min_options {
                     min_options = options;
                     best_cell = Some(i);
-                    if min_options == 1 { break; }
                 }
             }
         }
 
-        let idx = match best_cell {
-            Some(i) => i,
-            None => return true,
-        };
-
-        for val in 1..=9 {
-            if self.is_safe(idx, val) {
-                self.cells[idx] = val;
-                if self.solve_recursive() {
-                    return true;
+        match best_cell {
+            None => true, // All cells filled
+            Some(idx) => {
+                for val in 1..=9 {
+                    if self.is_safe(idx, val) {
+                        self.cells[idx] = val;
+                        if self.solve_recursive() {
+                            return true;
+                        }
+                        self.cells[idx] = 0;
+                    }
                 }
-                self.cells[idx] = 0;
+                false
             }
         }
-
-        false
     }
-
-    fn count_legal_moves(&self, index: usize) -> u8 {
-        let mut count = 0;
-        for val in 1..=9 {
-            if self.is_safe(index, val) {
-                count += 1;
-            }
-        }
-        count
-    }
-}
-
-fn generate_classic_9x9() -> (Vec<u8>, Vec<Vec<usize>>) {
-    let size = 81;
-    let cells = vec![0; size];
-    let mut adj = vec![vec![]; size];
-
-    for i in 0..size {
-        let row = i / 9;
-        let col = i % 9;
-        let box_r = (row / 3) * 3;
-        let box_c = (col / 3) * 3;
-
-        for k in 0..9 {
-            let r_idx = row * 9 + k;
-            if r_idx != i { adj[i].push(r_idx); }
-            
-            let c_idx = k * 9 + col;
-            if c_idx != i { adj[i].push(c_idx); }
-
-            let b_r = box_r + (k / 3);
-            let b_c = box_c + (k % 3);
-            let b_idx = b_r * 9 + b_c;
-            if b_idx != i { adj[i].push(b_idx); }
-        }
-        
-        adj[i].sort_unstable();
-        adj[i].dedup();
-    }
-    (cells, adj)
 }
