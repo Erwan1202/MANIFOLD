@@ -8,10 +8,22 @@ pub enum Topology {
 }
 
 #[wasm_bindgen]
+pub struct SolveStats {
+    pub success: bool,
+    pub iterations: u32,
+    pub backtracks: u32,
+    pub max_depth: u32,
+    pub time_us: f64,
+}
+
+#[wasm_bindgen]
 pub struct ManifoldEngine {
     cells: Vec<u8>,
     fixed: Vec<bool>,
     constraints: Vec<Vec<usize>>,
+    iter_count: u32,
+    backtrack_count: u32,
+    depth_max: u32,
 }
 
 #[wasm_bindgen]
@@ -26,6 +38,9 @@ impl ManifoldEngine {
             fixed: vec![false; cells.len()],
             cells,
             constraints,
+            iter_count: 0,
+            backtrack_count: 0,
+            depth_max: 0,
         }
     }
 
@@ -93,11 +108,32 @@ impl ManifoldEngine {
         false
     }
 
-    pub fn solve(&mut self) -> bool {
-        self.solve_recursive()
+    pub fn solve(&mut self) -> SolveStats {
+        self.iter_count = 0;
+        self.backtrack_count = 0;
+        self.depth_max = 0;
+
+        let window = web_sys::window().expect("no global window");
+        let performance = window.performance().expect("no performance object");
+        let start = performance.now();
+
+        let success = self.solve_recursive(0);
+
+        let end = performance.now();
+
+        SolveStats {
+            success,
+            iterations: self.iter_count,
+            backtracks: self.backtrack_count,
+            max_depth: self.depth_max,
+            time_us: (end - start) * 1000.0,
+        }
     }
 
-    fn solve_recursive(&mut self) -> bool {
+    fn solve_recursive(&mut self, depth: u32) -> bool {
+        self.iter_count += 1;
+        if depth > self.depth_max { self.depth_max = depth; }
+
         let mut best_cell: Option<usize> = None;
         let mut min_options = 10;
 
@@ -108,7 +144,11 @@ impl ManifoldEngine {
                     if self.is_safe(i, val) { options += 1; }
                 }
 
-                if options == 0 { return false; }
+                if options == 0 { 
+                    self.backtrack_count += 1;
+                    return false; 
+                }
+                
                 if options < min_options {
                     min_options = options;
                     best_cell = Some(i);
@@ -123,10 +163,11 @@ impl ManifoldEngine {
                 for val in 1..=9 {
                     if self.is_safe(idx, val) {
                         self.cells[idx] = val;
-                        if self.solve_recursive() { return true; }
+                        if self.solve_recursive(depth + 1) { return true; }
                         self.cells[idx] = 0;
                     }
                 }
+                self.backtrack_count += 1;
                 false
             }
         }

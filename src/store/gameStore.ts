@@ -8,6 +8,13 @@ let isWasmLoaded = false;
 
 export type VisualTopology = 'GRID' | 'TORUS' | 'CUBE';
 
+export interface BenchmarkStats {
+    iterations: number;
+    backtracks: number;
+    depth: number;
+    time: number;
+}
+
 interface GameState {
   grid: Uint8Array;
   fixed: Uint8Array;
@@ -16,6 +23,7 @@ interface GameState {
   errorCell: number | null;
   visualTopology: VisualTopology;
   currentPuzzleName: string;
+  stats: BenchmarkStats | null;
   
   init: () => Promise<void>;
   selectCell: (index: number | null) => void;
@@ -60,6 +68,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   errorCell: null,
   visualTopology: 'GRID',
   currentPuzzleName: '',
+  stats: null,
 
   init: async () => {
     if (isWasmLoaded || isInitializing) {
@@ -117,24 +126,34 @@ export const useGameStore = create<GameState>((set, get) => ({
         fixed: engineInstance.get_fixed_cells(),
         currentPuzzleName: name,
         status: 'READY',
-        errorCell: null
+        errorCell: null,
+        stats: null
     });
   },
 
   reset: () => {
     if (!engineInstance) return;
     engineInstance.reset();
-    set({ grid: engineInstance.get_grid(), status: 'READY', errorCell: null });
+    set({ grid: engineInstance.get_grid(), status: 'READY', errorCell: null, stats: null });
   },
 
   solve: () => {
     if (!engineInstance) return;
-    const start = performance.now();
+    
     const result = engineInstance.solve();
-    console.log(`Solved in ${(performance.now() - start).toFixed(2)}ms`);
-
-    if (result) {
-        set({ grid: engineInstance.get_grid(), status: 'SOLVED', errorCell: null });
+    
+    if (result.success) {
+        set({ 
+            grid: engineInstance.get_grid(), 
+            status: 'SOLVED', 
+            errorCell: null,
+            stats: {
+                iterations: result.iterations,
+                backtracks: result.backtracks,
+                depth: result.max_depth,
+                time: result.time_us
+            }
+        });
     } else {
         set({ status: 'IMPOSSIBLE' });
     }

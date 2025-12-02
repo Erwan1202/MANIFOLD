@@ -5,7 +5,7 @@ import { Scene3D } from './components/Scene3D';
 function App() {
   const { 
     init, status, loadRandomPuzzle, reset, solve, setCell, 
-    visualTopology, setTopology, currentPuzzleName 
+    visualTopology, setTopology, currentPuzzleName, stats 
   } = useGameStore();
 
   useEffect(() => { init(); }, []);
@@ -21,26 +21,12 @@ function App() {
   }, [setCell]);
 
   const btnStyle = {
-    padding: '8px 12px', 
-    margin: '0 4px', 
-    border: '1px solid #333',
-    borderRadius: '4px',
-    cursor: 'pointer', 
-    fontFamily: 'monospace', 
-    fontWeight: 'bold', 
-    textTransform: 'uppercase' as const,
-    color: '#e5e5e5', 
-    fontSize: '11px', 
-    background: '#171717', 
-    transition: 'all 0.2s'
+    padding: '8px 12px', margin: '0 4px', border: '1px solid #333', borderRadius: '4px',
+    cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold', textTransform: 'uppercase' as const,
+    color: '#e5e5e5', fontSize: '11px', background: '#171717', transition: 'all 0.2s'
   };
 
-  const activeBtnStyle = { 
-    ...btnStyle, 
-    background: '#2563eb', 
-    border: '1px solid #2563eb', 
-    color: 'white' 
-  };
+  const activeBtnStyle = { ...btnStyle, background: '#2563eb', border: '1px solid #2563eb', color: 'white' };
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', background: '#000', overflow: 'hidden' }}>
@@ -74,6 +60,34 @@ function App() {
 
       <div style={{ flex: 1, position: 'relative', width: '100%', minHeight: 0 }}>
          <Scene3D />
+         
+         {stats && status === 'SOLVED' && (
+             <div style={{ 
+                 position: 'absolute', bottom: '20px', left: '20px', 
+                 background: 'rgba(0,0,0,0.8)', border: '1px solid #333', 
+                 padding: '15px', borderRadius: '8px', color: '#fff', 
+                 fontFamily: 'monospace', fontSize: '12px', pointerEvents: 'none',
+                 backdropFilter: 'blur(4px)'
+             }}>
+                 <div style={{ color: '#2563eb', fontWeight: 'bold', marginBottom: '8px' }}>RUST/WASM BENCHMARK</div>
+                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px 20px' }}>
+                     <span style={{ color: '#888' }}>Time:</span>
+                     <span style={{ color: '#4ade80' }}>{(stats.time / 1000).toFixed(2)} ms</span>
+                     
+                     <span style={{ color: '#888' }}>Iterations:</span>
+                     <span>{stats.iterations.toLocaleString()}</span>
+                     
+                     <span style={{ color: '#888' }}>Backtracks:</span>
+                     <span style={{ color: stats.backtracks > 0 ? '#fbbf24' : '#fff' }}>{stats.backtracks.toLocaleString()}</span>
+                     
+                     <span style={{ color: '#888' }}>Max Depth:</span>
+                     <span>{stats.depth}</span>
+                     
+                     <span style={{ color: '#888' }}>Perf:</span>
+                     <span>{(stats.iterations / (stats.time / 1000)).toFixed(0)} ops/ms</span>
+                 </div>
+             </div>
+         )}
       </div>
 
       <div style={{ padding: '16px', borderTop: '1px solid #333', background: '#0a0a0a', zIndex: 10, textAlign: 'center' }}>
