@@ -12,6 +12,7 @@ const GRID_SIZE: usize = 81;
 #[wasm_bindgen]
 pub struct ManifoldEngine {
     cells: [u8; GRID_SIZE],
+    fixed: [bool; GRID_SIZE], // Track initial puzzle cells (immutable)
 }
 
 #[wasm_bindgen]
@@ -19,8 +20,27 @@ impl ManifoldEngine {
     pub fn new(_topo: Topology) -> ManifoldEngine {
         ManifoldEngine {
             cells: [0; GRID_SIZE],
+            fixed: [false; GRID_SIZE],
         }
     }
+
+    // --- CRITICAL FOR JS BRIDGE (PHASE 4.0) ---
+    /// Export entire grid in one WASM call (not 81x calls to get_cell!)
+    pub fn get_grid(&self) -> Vec<u8> {
+        self.cells.to_vec()
+    }
+
+    /// Export fixed cells metadata for UI (greyed out in UI)
+    /// Returns Vec<u8> where 1 = fixed, 0 = editable (wasm-bindgen limitation)
+    pub fn get_fixed_cells(&self) -> Vec<u8> {
+        self.fixed.iter().map(|&b| if b { 1 } else { 0 }).collect()
+    }
+
+    /// Check if a cell is immutable (part of initial puzzle)
+    pub fn is_fixed(&self, index: usize) -> bool {
+        if index < GRID_SIZE { self.fixed[index] } else { false }
+    }
+    // -------------------------------------------
 
     pub fn get_cell(&self, index: usize) -> u8 {
         if index < GRID_SIZE {
@@ -32,6 +52,11 @@ impl ManifoldEngine {
 
     pub fn set_cell(&mut self, index: usize, value: u8) -> bool {
         if index >= GRID_SIZE || value > 9 {
+            return false;
+        }
+
+        // Prevent modification of fixed cells
+        if self.fixed[index] {
             return false;
         }
 
@@ -88,23 +113,24 @@ impl ManifoldEngine {
     }
 
     pub fn reset(&mut self) {
-        self.cells = [0; GRID_SIZE];
+        // Only clear non-fixed cells (preserve initial puzzle)
+        for i in 0..GRID_SIZE {
+            if !self.fixed[i] {
+                self.cells[i] = 0;
+            }
+        }
     }
 
-    pub fn load_example(&mut self) {
-        // Sudoku "Hard" standard
-        let example: [u8; GRID_SIZE] = [
-            0, 0, 0, 8, 0, 1, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 4, 3, 0,
-            5, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 7, 0, 8, 0, 0,
-            0, 0, 0, 0, 0, 0, 1, 0, 0,
-            0, 2, 0, 0, 3, 0, 0, 0, 0,
-            6, 0, 0, 0, 0, 0, 0, 7, 5,
-            0, 0, 3, 4, 0, 0, 0, 0, 0,
-            0, 0, 0, 2, 0, 0, 6, 0, 0
-        ];
-        self.cells = example;
+    pub fn load_puzzle(&mut self, puzzle: Vec<u8>) {
+        if puzzle.len() != GRID_SIZE {
+            return;
+        }
+        
+        self.cells = puzzle.try_into().unwrap_or([0; GRID_SIZE]);
+        
+        for i in 0..GRID_SIZE {
+            self.fixed[i] = self.cells[i] != 0;
+        }
     }
 
     pub fn solve(&mut self) -> bool {

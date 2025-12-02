@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { ManifoldEngine, Topology, init_core } from '../manifold-wasm/manifold_core';
 import init from '../manifold-wasm/manifold_core';
-import { puzzles, Puzzle } from '../examples/puzzles';
+import { puzzles, Puzzle, getRandomPuzzle } from '../examples/puzzles';
 
 let engineInstance: ManifoldEngine | null = null;
 let wasmInitialized = false;
@@ -47,8 +47,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       init_core();
       engineInstance = ManifoldEngine.new(Topology.Classic9x9);
-      engineInstance.load_example();
-      set({ grid: buildGridFromEngine(engineInstance), status: 'READY' });
+      const randomPuzzle = getRandomPuzzle();
+      
+      for (let i = 0; i < randomPuzzle.grid.length; i++) {
+        if (randomPuzzle.grid[i] !== 0) {
+          engineInstance.set_cell(i, randomPuzzle.grid[i]);
+        }
+      }
+      
+      set({ 
+        grid: buildGridFromEngine(engineInstance), 
+        status: 'READY',
+        currentPuzzle: randomPuzzle
+      });
     } catch (e) {
       console.error("WASM Load Error", e);
     }
@@ -74,9 +85,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   loadExample: () => {
-    if (!engineInstance) return;
-    engineInstance.load_example();
-    set({ grid: buildGridFromEngine(engineInstance), status: 'READY', selectedCell: null });
+    const randomPuzzle = getRandomPuzzle();
+    const { loadPuzzle } = get();
+    loadPuzzle(randomPuzzle);
   },
 
   loadPuzzle: (puzzle: Puzzle) => {

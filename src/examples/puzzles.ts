@@ -6,7 +6,7 @@ export interface Puzzle {
 
 export const puzzles: Puzzle[] = [
   {
-    name: 'Easy 1',
+    name: 'Classic Easy',
     difficulty: 'Easy',
     grid: [
       5, 3, 0, 0, 7, 0, 0, 0, 0,
@@ -21,7 +21,7 @@ export const puzzles: Puzzle[] = [
     ]
   },
   {
-    name: 'Easy 2',
+    name: 'Easy Primer',
     difficulty: 'Easy',
     grid: [
       1, 0, 0, 0, 0, 7, 0, 9, 0,
@@ -36,7 +36,22 @@ export const puzzles: Puzzle[] = [
     ]
   },
   {
-    name: 'Medium 1',
+    name: 'Easy Starter',
+    difficulty: 'Easy',
+    grid: [
+      2, 0, 0, 0, 3, 0, 0, 8, 1,
+      0, 0, 4, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 6, 0, 0,
+      4, 2, 0, 0, 8, 0, 0, 5, 3
+    ]
+  },
+  {
+    name: 'Medium Challenge',
     difficulty: 'Medium',
     grid: [
       0, 0, 3, 0, 2, 0, 6, 0, 0,
@@ -51,7 +66,7 @@ export const puzzles: Puzzle[] = [
     ]
   },
   {
-    name: 'Medium 2',
+    name: 'Medium Enigma',
     difficulty: 'Medium',
     grid: [
       0, 0, 0, 2, 6, 0, 7, 0, 1,
@@ -66,7 +81,22 @@ export const puzzles: Puzzle[] = [
     ]
   },
   {
-    name: 'Hard 1',
+    name: 'Medium Labyrinth',
+    difficulty: 'Medium',
+    grid: [
+      0, 2, 0, 0, 0, 0, 0, 5, 0,
+      0, 0, 0, 3, 0, 2, 0, 0, 0,
+      3, 0, 0, 0, 5, 0, 0, 0, 7,
+      0, 0, 0, 0, 0, 0, 8, 0, 0,
+      0, 0, 6, 0, 0, 0, 4, 0, 0,
+      0, 0, 1, 0, 0, 0, 2, 0, 0,
+      8, 0, 0, 0, 1, 0, 0, 0, 4,
+      0, 0, 0, 7, 0, 8, 0, 0, 0,
+      0, 9, 0, 0, 0, 0, 0, 3, 0
+    ]
+  },
+  {
+    name: 'Hard Puzzle',
     difficulty: 'Hard',
     grid: [
       0, 0, 0, 8, 0, 1, 0, 0, 0,
@@ -81,7 +111,7 @@ export const puzzles: Puzzle[] = [
     ]
   },
   {
-    name: 'Hard 2',
+    name: 'Hard Maze',
     difficulty: 'Hard',
     grid: [
       0, 0, 5, 3, 0, 0, 0, 0, 0,
@@ -96,7 +126,22 @@ export const puzzles: Puzzle[] = [
     ]
   },
   {
-    name: 'Expert 1',
+    name: 'Hard Vortex',
+    difficulty: 'Hard',
+    grid: [
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 5, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 3, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 7, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      1, 0, 0, 0, 0, 0, 0, 0, 9
+    ]
+  },
+  {
+    name: 'Expert Abyss',
     difficulty: 'Expert',
     grid: [
       0, 0, 0, 0, 0, 0, 0, 1, 2,
@@ -111,7 +156,7 @@ export const puzzles: Puzzle[] = [
     ]
   },
   {
-    name: 'Expert 2 - Minimal',
+    name: 'Expert Minimal',
     difficulty: 'Expert',
     grid: [
       0, 0, 5, 0, 1, 0, 0, 0, 0,
@@ -123,6 +168,21 @@ export const puzzles: Puzzle[] = [
       7, 0, 0, 0, 0, 0, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0, 8,
       0, 0, 0, 0, 6, 0, 2, 0, 0
+    ]
+  },
+  {
+    name: 'Expert Quantum',
+    difficulty: 'Expert',
+    grid: [
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 1, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0
     ]
   }
 ];
