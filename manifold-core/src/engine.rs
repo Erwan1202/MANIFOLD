@@ -60,9 +60,56 @@ impl ManifoldEngine {
     pub fn reset(&mut self) {
         self.cells.fill(0);
     }
-}
 
-// --- TOPOLOGY GENERATORS ---
+    pub fn solve(&mut self) -> bool {
+        self.solve_recursive()
+    }
+
+    fn solve_recursive(&mut self) -> bool {
+        let mut best_cell = None;
+        let mut min_options = 10;
+
+        for i in 0..self.size {
+            if self.cells[i] == 0 {
+                let options = self.count_legal_moves(i);
+                if options == 0 { return false; }
+                
+                if options < min_options {
+                    min_options = options;
+                    best_cell = Some(i);
+                    if min_options == 1 { break; }
+                }
+            }
+        }
+
+        let idx = match best_cell {
+            Some(i) => i,
+            None => return true,
+        };
+
+        for val in 1..=9 {
+            if self.is_safe(idx, val) {
+                self.cells[idx] = val;
+                if self.solve_recursive() {
+                    return true;
+                }
+                self.cells[idx] = 0;
+            }
+        }
+
+        false
+    }
+
+    fn count_legal_moves(&self, index: usize) -> u8 {
+        let mut count = 0;
+        for val in 1..=9 {
+            if self.is_safe(index, val) {
+                count += 1;
+            }
+        }
+        count
+    }
+}
 
 fn generate_classic_9x9() -> (Vec<u8>, Vec<Vec<usize>>) {
     let size = 81;
