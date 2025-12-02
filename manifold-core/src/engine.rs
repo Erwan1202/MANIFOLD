@@ -24,6 +24,7 @@ pub struct ManifoldEngine {
     iter_count: u32,
     backtrack_count: u32,
     depth_max: u32,
+    domains: Vec<Vec<bool>>,
 }
 
 #[wasm_bindgen]
@@ -34,13 +35,15 @@ impl ManifoldEngine {
             Topology::Cube6Faces => generate_cube_topology(),
         };
 
+        let size = cells.len();
         ManifoldEngine {
-            fixed: vec![false; cells.len()],
+            fixed: vec![false; size],
             cells,
             constraints,
             iter_count: 0,
             backtrack_count: 0,
             depth_max: 0,
+            domains: vec![vec![true; 10]; size],
         }
     }
 
@@ -62,11 +65,13 @@ impl ManifoldEngine {
 
         if value == 0 {
             self.cells[index] = 0;
+            self.recompute_domains();
             return true;
         }
 
         if self.is_safe(index, value) {
             self.cells[index] = value;
+            self.recompute_domains();
             return true;
         }
         false
@@ -85,6 +90,7 @@ impl ManifoldEngine {
         for i in 0..self.cells.len() {
             if !self.fixed[i] { self.cells[i] = 0; }
         }
+        self.recompute_domains();
     }
 
     pub fn load_puzzle(&mut self, puzzle: Vec<u8>) -> bool {
@@ -93,6 +99,7 @@ impl ManifoldEngine {
                 self.cells[i] = puzzle[i];
                 self.fixed[i] = puzzle[i] != 0;
             }
+            self.recompute_domains();
             return true;
         } else if puzzle.len() == 81 {
             for i in 0..81 {
@@ -103,6 +110,7 @@ impl ManifoldEngine {
                 self.cells[i] = 0;
                 self.fixed[i] = false;
             }
+            self.recompute_domains();
             return true;
         }
         false
@@ -112,12 +120,14 @@ impl ManifoldEngine {
         self.iter_count = 0;
         self.backtrack_count = 0;
         self.depth_max = 0;
+        
+        self.recompute_domains();
 
         let window = web_sys::window().expect("no global window");
         let performance = window.performance().expect("no performance object");
         let start = performance.now();
 
-        let success = self.solve_recursive(0);
+        let success = self.solve_wfc(0);
 
         let end = performance.now();
 
@@ -130,57 +140,114 @@ impl ManifoldEngine {
         }
     }
 
-    fn solve_recursive(&mut self, depth: u32) -> bool {
+    fn recompute_domains(&mut self) {
+        let size = self.cells.len();
+        for i in 0..size {
+            for v in 1..=9 {
+                self.domains[i][v] = true;
+            }
+        }
+
+        for i in 0..size {
+            if self.cells[i] != 0 {
+                let val = self.cells[i] as usize;
+                for v in 1..=9 {
+                    if v != val { self.domains[i][v] = false; }
+                }
+                
+                for &neighbor in &self.constraints[i] {
+                    self.domains[neighbor][val] = false;
+                }
+            }
+        }
+    }
+
+    fn solve_wfc(&mut self, depth: u32) -> bool {
         self.iter_count += 1;
         if depth > self.depth_max { self.depth_max = depth; }
 
-        let mut best_cell: Option<usize> = None;
-        let mut min_options = 10;
+        let mut best_cell = None;
+        let mut min_entropy = 10;
 
         for i in 0..self.cells.len() {
             if self.cells[i] == 0 {
-                let mut options = 0;
-                for val in 1..=9 {
-                    if self.is_safe(i, val) { options += 1; }
+                let mut entropy = 0;
+                for v in 1..=9 {
+                    if self.domains[i][v] { entropy += 1; }
                 }
 
-                if options == 0 { 
+                if entropy == 0 { 
                     self.backtrack_count += 1;
-                    return false; 
+                    return false;
                 }
-                
-                if options < min_options {
-                    min_options = options;
+
+                if entropy < min_entropy {
+                    min_entropy = entropy;
                     best_cell = Some(i);
-                    if min_options == 1 { break; }
+                    if min_entropy == 1 { break; }
                 }
             }
         }
 
-        match best_cell {
-            None => true,
-            Some(idx) => {
-                for val in 1..=9 {
-                    if self.is_safe(idx, val) {
-                        self.cells[idx] = val;
-                        if self.solve_recursive(depth + 1) { return true; }
-                        self.cells[idx] = 0;
-                    }
-                }
-                self.backtrack_count += 1;
-                false
+        let idx = match best_cell {
+            Some(i) => i,
+            None => return true,
+        };
+
+        let possible_values: Vec<u8> = (1..=9)
+            .filter(|&v| self.domains[idx][v as usize])
+            .collect();
+
+        for val in possible_values {
+            let backup_domains = self.backup_affected_domains(idx, val);
+            
+            self.cells[idx] = val;
+            self.propagate(idx, val);
+
+            if self.solve_wfc(depth + 1) {
+                return true;
             }
+
+            self.cells[idx] = 0;
+            self.restore_domains(idx, backup_domains);
+        }
+
+        self.backtrack_count += 1;
+        false
+    }
+
+    fn propagate(&mut self, index: usize, value: u8) {
+        let v = value as usize;
+        for k in 1..=9 {
+            if k != v { self.domains[index][k] = false; }
+        }
+        for &neighbor in &self.constraints[index] {
+            self.domains[neighbor][v] = false;
+        }
+    }
+
+    fn backup_affected_domains(&self, index: usize, value: u8) -> Vec<(usize, Vec<bool>)> {
+        let mut backup = Vec::new();
+        backup.push((index, self.domains[index].clone()));
+        
+        for &neighbor in &self.constraints[index] {
+            if self.domains[neighbor][value as usize] {
+                backup.push((neighbor, self.domains[neighbor].clone()));
+            }
+        }
+        backup
+    }
+
+    fn restore_domains(&mut self, _index: usize, backup: Vec<(usize, Vec<bool>)>) {
+        for (idx, domain) in backup {
+            self.domains[idx] = domain;
         }
     }
 }
 
-fn generate_classic_9x9() -> (Vec<u8>, Vec<Vec<usize>>) {
-    generate_sudoku_constraints(1)
-}
-
+fn generate_classic_9x9() -> (Vec<u8>, Vec<Vec<usize>>) { generate_sudoku_constraints(1) }
 fn generate_cube_topology() -> (Vec<u8>, Vec<Vec<usize>>) {
     let (cells, mut constraints) = generate_sudoku_constraints(6);
-
     let mut connect = |face_a: usize, dir_a: usize, face_b: usize, dir_b: usize| {
         let get_indices = |face: usize, dir: usize| -> Vec<usize> {
             let base = face * 81;
@@ -192,10 +259,8 @@ fn generate_cube_topology() -> (Vec<u8>, Vec<Vec<usize>>) {
                 _ => vec![]
             }
         };
-
         let edge_a = get_indices(face_a, dir_a);
         let edge_b = get_indices(face_b, dir_b);
-
         for i in 0..9 {
             let u = edge_a[i];
             let v = edge_b[i];
@@ -203,30 +268,21 @@ fn generate_cube_topology() -> (Vec<u8>, Vec<Vec<usize>>) {
             constraints[v].push(u);
         }
     };
-
     connect(0, 1, 2, 3);
     connect(0, 3, 3, 1);
     connect(0, 0, 4, 2);
     connect(0, 2, 5, 0);
-
     connect(1, 3, 2, 1);
     connect(1, 1, 3, 3);
     connect(1, 0, 4, 0);
     connect(1, 2, 5, 2);
-
-    for list in &mut constraints {
-        list.sort_unstable();
-        list.dedup();
-    }
-
+    for list in &mut constraints { list.sort_unstable(); list.dedup(); }
     (cells, constraints)
 }
-
 fn generate_sudoku_constraints(num_faces: usize) -> (Vec<u8>, Vec<Vec<usize>>) {
     let total_cells = num_faces * 81;
     let cells = vec![0; total_cells];
     let mut constraints = vec![vec![]; total_cells];
-
     for face in 0..num_faces {
         let base = face * 81;
         for i in 0..81 {
@@ -235,14 +291,11 @@ fn generate_sudoku_constraints(num_faces: usize) -> (Vec<u8>, Vec<Vec<usize>>) {
             let col = i % 9;
             let box_r = (row / 3) * 3;
             let box_c = (col / 3) * 3;
-
             for k in 0..9 {
                 let r_idx = base + (row * 9 + k);
                 if r_idx != global_idx { constraints[global_idx].push(r_idx); }
-                
                 let c_idx = base + (k * 9 + col);
                 if c_idx != global_idx { constraints[global_idx].push(c_idx); }
-
                 let b_idx = base + (box_r + (k / 3)) * 9 + (box_c + (k % 3));
                 if b_idx != global_idx { constraints[global_idx].push(b_idx); }
             }
