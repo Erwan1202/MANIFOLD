@@ -249,7 +249,7 @@ export const Scene3D = () => {
             )}
         </Center>
 
-        <AccumulativeShadows temporal frames={60} color="#111111" colorBlend={2} toneMapped={true} alphaTest={0.7} opacity={0.3} scale={40} position={[0, -12, 0]}>
+        <AccumulativeShadows temporal frames={120} color="#111111" colorBlend={2} toneMapped={true} alphaTest={0.7} opacity={0.3} scale={40} position={[0, -12, 0]}>
           <RandomizedLight amount={8} radius={8} ambient={0.6} intensity={1} position={[10, 20, 5]} bias={0.001} />
         </AccumulativeShadows>
       </Canvas>
