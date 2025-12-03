@@ -1,180 +1,257 @@
 import React, { useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Text, OrbitControls, Center, Stars } from '@react-three/drei';
+import { Text, OrbitControls, Center, Edges, AccumulativeShadows, RandomizedLight } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 
-const Cell3D = React.memo(({ position, value, isSelected, isError, onClick, rotation }: any) => {
-  const mesh = useRef<THREE.Mesh>(null);
-  
-  useFrame(() => {
-    if (!mesh.current) return;
-    const targetScale = (isSelected || isError) ? 1.1 : 1;
-    mesh.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.3);
-  });
+const TORUS_MAJOR_RADIUS = 12; 
+const TORUS_MINOR_RADIUS = 2.85;
 
-  const color = useMemo(() => {
-    if (isError) return '#ef4444';
-    if (isSelected) return '#2563eb';
-    
-    if (value === 0) return '#333333'; 
-    
-    return '#555555';
-  }, [value, isSelected, isError]);
+const TORUS_CORE_MAJOR_RADIUS = 6.2;
+const TORUS_CORE_MINOR_RADIUS = 2.6;
 
-  return (
-    <group position={position} rotation={rotation || [0, 0, 0]}>
-      <mesh ref={mesh} onClick={(e) => { e.stopPropagation(); onClick(); }}>
-        <boxGeometry args={[0.85, 0.85, 0.2]} />
-        <meshStandardMaterial 
-            color={color} 
-            emissive={isError ? '#ef4444' : (isSelected ? '#1d4ed8' : '#000000')} 
-            emissiveIntensity={isError ? 1.5 : (isSelected ? 0.5 : 0)} 
-            roughness={0.2}
-            metalness={0.1}
-        />
-      </mesh>
-      {value !== 0 && (
-        <Text 
-            position={[0, 0, 0.16]} 
-            fontSize={0.5} 
-            color="#ffffff" 
-            anchorX="center" 
-            anchorY="middle"
-            characters="0123456789"
-        >
-          {value}
-        </Text>
-      )}
-    </group>
-  );
-}, (prev, next) => {
-    return prev.value === next.value && 
-           prev.isSelected === next.isSelected && 
-           prev.isError === next.isError &&
-           prev.position === next.position;
+
+const TopologyCore = React.memo(({ type }: { type: string }) => {
+    const material = <meshBasicMaterial color="#FFFFFF" />; 
+
+    if (type === 'CUBE') {
+        return (
+            <mesh>
+                <boxGeometry args={[8.95, 8.95, 8.95]} />
+                {material}
+            </mesh>
+        );
+    }
+    if (type === 'TORUS') {
+        return (
+            <group rotation={[Math.PI / 2, 0, 0]}>
+            </group>
+        );
+    }
+    return null;
 });
 
-const useLayout = (topology: string) => {
-  return useMemo(() => {
-    const cells = [];
-    const GRID_SIZE = 486;
-    
-    if (topology === 'GRID') {
-      for (let i = 0; i < 81; i++) {
-        const row = Math.floor(i / 9);
-        const col = i % 9;
-        const xGap = Math.floor(col / 3) * 0.2;
-        const yGap = Math.floor(row / 3) * 0.2;
-        cells.push({
-          pos: [(col - 4) * 1.1 + xGap, (4 - row) * 1.1 - yGap, 0],
-          rot: [0, 0, 0],
-          idx: i
+
+const CellPlate = ({ position, rotation, value, isSelected, isError, onClick, size = [0.98, 0.98] }: any) => {
+    return (
+        <group position={position} rotation={rotation}>
+            <mesh onClick={(e) => { e.stopPropagation(); onClick(); }}>
+                <planeGeometry args={size} />
+                <meshBasicMaterial 
+                    color={isError ? '#D93025' : (isSelected ? '#FEF08A' : '#FFFFFF')} 
+                    side={THREE.DoubleSide}
+                    polygonOffset={true}
+                    polygonOffsetFactor={-1}
+                />
+                <Edges scale={1} threshold={15} color="#111111" linewidth={5} />
+            </mesh>
+            {value !== 0 && (
+                <Text 
+                    position={[0, 0, 0.02]} 
+                    fontSize={Math.min(size[0], size[1]) * 0.55} 
+                    color="#111111" 
+                    anchorX="center" 
+                    anchorY="middle"
+                    characters="0123456789"
+                >
+                    {value}
+                </Text>
+            )}
+        </group>
+    );
+};
+
+const CubeView = ({ grid, selectCell, selectedCell, errorCell }: any) => {
+    const faces = useMemo(() => {
+        const size = 4.5;
+        return [
+            { pos: [0, 0, size], rot: [0, 0, 0] },
+            { pos: [0, 0, -size], rot: [0, Math.PI, 0] },
+            { pos: [size, 0, 0], rot: [0, Math.PI / 2, 0] },
+            { pos: [-size, 0, 0], rot: [0, -Math.PI / 2, 0] },
+            { pos: [0, size, 0], rot: [-Math.PI / 2, 0, 0] },
+            { pos: [0, -size, 0], rot: [Math.PI / 2, 0, 0] },
+        ];
+    }, []);
+
+    return (
+        <group>
+            {faces.map((face, faceIdx) => (
+                <group key={faceIdx} position={face.pos as any} rotation={face.rot as any}>
+                    {Array.from({ length: 81 }).map((_, i) => {
+                        const row = Math.floor(i / 9);
+                        const col = i % 9;
+                        const idx = faceIdx * 81 + i;
+                        const x = (col - 4) * 1.0;
+                        const y = (4 - row) * 1.0;
+                        return (
+                            <CellPlate
+                                key={idx}
+                                position={[x, y, 0]}
+                                rotation={[0, 0, 0]}
+                                value={grid[idx]}
+                                isSelected={selectedCell === idx}
+                                isError={errorCell === idx}
+                                onClick={() => selectCell(idx)}
+                            />
+                        );
+                    })}
+                </group>
+            ))}
+        </group>
+    );
+};
+
+const GridView = ({ grid, selectCell, selectedCell, errorCell }: any) => {
+    return (
+        <group>
+            <mesh position={[0, 0, -0.05]}>
+                <planeGeometry args={[9.5, 9.5]} />
+                <meshBasicMaterial color="#FFFFFF" />
+            </mesh>
+            {Array.from({ length: 81 }).map((_, i) => {
+                const row = Math.floor(i / 9);
+                const col = i % 9;
+                const xGap = Math.floor(col / 3) * 0.1;
+                const yGap = Math.floor(row / 3) * 0.1;
+                const x = (col - 4) * 1.0 + xGap;
+                const y = (4 - row) * 1.0 - yGap;
+                return (
+                    <CellPlate
+                        key={i}
+                        position={[x, y, 0]}
+                        rotation={[0, 0, 0]}
+                        value={grid[i]}
+                        isSelected={selectedCell === i}
+                        isError={errorCell === i}
+                        onClick={() => selectCell(i)}
+                    />
+                );
+            })}
+        </group>
+    );
+};
+
+const TorusView = ({ grid, selectCell, selectedCell, errorCell }: any) => {
+  const cells = useMemo(() => {
+    const items: {
+      idx: number;
+      pos: [number, number, number];
+      rot: [number, number, number];
+      size: [number, number];
+    }[] = [];
+
+    const rings = 54;       
+    const ringSize = 9;   
+
+    const R = TORUS_MAJOR_RADIUS;
+    const r = TORUS_MINOR_RADIUS;
+
+    const tileWidth = 1.35;
+    const tileHeight = 1.95;
+
+    for (let i = 0; i < rings; i++) {
+      for (let j = 0; j < ringSize; j++) {
+        const globalIndex = i * ringSize + j;
+        if (globalIndex >= 486) continue;
+
+        const u = ((i + 0.5) / rings) * Math.PI * 2;
+        const v = ((j + 0.5) / ringSize) * Math.PI * 2;
+
+        const cosV = Math.cos(v);
+        const sinV = Math.sin(v);
+        const cosU = Math.cos(u);
+        const sinU = Math.sin(u);
+
+        const radius = R + r * cosV;
+
+        const x = radius * cosU;
+        const y = radius * sinU;
+        const z = r * sinV;
+
+        const posVec = new THREE.Vector3(x, y, z);
+
+        const centerVec = new THREE.Vector3(R * cosU, R * sinU, 0);
+        const normal = new THREE.Vector3().subVectors(posVec, centerVec).normalize();
+
+        const tangentU = new THREE.Vector3(
+          -radius * sinU,
+          radius * cosU,
+          0
+        ).normalize();
+
+
+        const tangentV = new THREE.Vector3()
+          .crossVectors(normal, tangentU)
+          .normalize();
+
+        const matrix = new THREE.Matrix4();
+        matrix.makeBasis(tangentU, tangentV, normal);
+
+        const euler = new THREE.Euler().setFromRotationMatrix(matrix);
+
+        items.push({
+          idx: globalIndex,
+          pos: [x, y, z],
+          rot: [euler.x, euler.y, euler.z],
+          size: [tileWidth, tileHeight],
         });
-      }
-    } 
-    else if (topology === 'CUBE') {
-      const size = 5;
-      const faces = [
-        { pos: [0, 0, size], rot: [0, 0, 0] },
-        { pos: [0, 0, -size], rot: [0, Math.PI, 0] },
-        { pos: [size, 0, 0], rot: [0, Math.PI/2, 0] },
-        { pos: [-size, 0, 0], rot: [0, -Math.PI/2, 0] },
-        { pos: [0, size, 0], rot: [-Math.PI/2, 0, 0] },
-        { pos: [0, -size, 0], rot: [Math.PI/2, 0, 0] },
-      ];
-      
-      faces.forEach((face, faceIdx) => {
-        for(let i=0; i<81; i++) {
-             const row = Math.floor(i / 9);
-             const col = i % 9;
-             const lx = (col - 4) * 0.9;
-             const ly = (4 - row) * 0.9;
-             
-             const dummy = new THREE.Object3D();
-             dummy.position.set(lx, ly, 0);
-             dummy.lookAt(0,0,1);
-             
-             const parent = new THREE.Object3D();
-             parent.position.set(...face.pos as [number, number, number]);
-             parent.rotation.set(...face.rot as [number, number, number]);
-             parent.add(dummy);
-             parent.updateMatrixWorld(true);
-             
-             const finalPos = new THREE.Vector3();
-             const finalRot = new THREE.Quaternion();
-             dummy.getWorldPosition(finalPos);
-             dummy.getWorldQuaternion(finalRot);
-             
-             const globalIndex = faceIdx * 81 + i;
-             cells.push({
-               pos: [finalPos.x, finalPos.y, finalPos.z],
-               rot: [new THREE.Euler().setFromQuaternion(finalRot).x, new THREE.Euler().setFromQuaternion(finalRot).y, new THREE.Euler().setFromQuaternion(finalRot).z],
-               idx: globalIndex
-             });
-        }
-      });
-    }
-    else if (topology === 'TORUS') {
-      const rings = 54; 
-      const ringSize = 9; 
-      const R = 12; 
-      const r = 3;  
-      
-      for (let i = 0; i < rings; i++) {
-        for (let j = 0; j < ringSize; j++) {
-          const u = (i / rings) * Math.PI * 2;
-          const v = (j / ringSize) * Math.PI * 2;
-          const x = (R + r * Math.cos(v)) * Math.cos(u);
-          const y = (R + r * Math.cos(v)) * Math.sin(u);
-          const z = r * Math.sin(v);
-          
-          const globalIndex = i * ringSize + j;
-          if (globalIndex < GRID_SIZE) {
-            cells.push({
-                pos: [x, y, z],
-                rot: [0, 0, u + Math.PI/2],
-                idx: globalIndex
-            });
-          }
-        }
       }
     }
 
-    return cells;
-  }, [topology]);
+    return items;
+  }, []);
+
+  return (
+    <group>
+      {cells.map((c) => (
+        <CellPlate
+          key={c.idx}
+          position={c.pos}
+          rotation={c.rot}
+          size={c.size}
+          value={grid[c.idx]}
+          isSelected={selectedCell === c.idx}
+          isError={errorCell === c.idx}
+          onClick={() => selectCell(c.idx)}
+        />
+      ))}
+    </group>
+  );
 };
+
 
 export const Scene3D = () => {
   const { grid, visualTopology, selectedCell, selectCell, errorCell } = useGameStore();
-  const layout = useLayout(visualTopology);
 
   return (
-    <div style={{ width: '100%', height: '100%', minHeight: '60vh', background: '#000' }}>
-      <Canvas dpr={[1, 2]} camera={{ position: [0, 0, 18], fov: 50 }}>
-        <color attach="background" args={['#050505']} />
+    <div style={{ width: '100%', height: '100%' }}>
+      <Canvas dpr={[1, 2]} camera={{ position: [0, 0, 26], fov: 40 }}>
+        <color attach="background" args={['#ffffffff']} />
         
-        <ambientLight intensity={0.8} />
-        <pointLight position={[20, 20, 20]} intensity={1.5} />
-        <pointLight position={[-20, -20, -20]} intensity={1} color="#4a90e2" />
-        
-        <Stars count={1000} factor={4} fade />
+        <ambientLight intensity={1.5} />
+        <directionalLight position={[10, 20, 10]} intensity={1.2} />
         <OrbitControls enablePan={true} />
+        
         <Center>
-          <group>
-            {layout.map((cell) => (
-              <Cell3D 
-                key={cell.idx}
-                position={cell.pos}
-                rotation={cell.rot}
-                value={grid[cell.idx]}
-                isSelected={selectedCell === cell.idx}
-                isError={errorCell === cell.idx}
-                onClick={() => selectCell(cell.idx)}
-              />
-            ))}
-          </group>
+            {visualTopology !== 'GRID' && <TopologyCore type={visualTopology} />}
+
+            {visualTopology === 'GRID' && (
+                <GridView grid={grid} selectCell={selectCell} selectedCell={selectedCell} errorCell={errorCell} />
+            )}
+            
+            {visualTopology === 'CUBE' && (
+                <CubeView grid={grid} selectCell={selectCell} selectedCell={selectedCell} errorCell={errorCell} />
+            )}
+
+            {visualTopology === 'TORUS' && (
+                <TorusView grid={grid} selectCell={selectCell} selectedCell={selectedCell} errorCell={errorCell} />
+            )}
         </Center>
+
+        <AccumulativeShadows temporal frames={60} color="#111111" colorBlend={2} toneMapped={true} alphaTest={0.7} opacity={0.3} scale={40} position={[0, -12, 0]}>
+          <RandomizedLight amount={8} radius={8} ambient={0.6} intensity={1} position={[10, 20, 5]} bias={0.001} />
+        </AccumulativeShadows>
       </Canvas>
     </div>
   );

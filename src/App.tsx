@@ -20,82 +20,95 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [setCell]);
 
-  const btnStyle = {
-    padding: '8px 12px', margin: '0 4px', border: '1px solid #333', borderRadius: '4px',
-    cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold', textTransform: 'uppercase' as const,
-    color: '#e5e5e5', fontSize: '11px', background: '#171717', transition: 'all 0.2s'
-  };
+  const navBtnStyle = (isActive: boolean) => `
+    px-4 py-2 text-sm font-bold border-r-2 border-ink transition-all
+    ${isActive ? 'bg-ink text-paper' : 'bg-paper text-ink hover:bg-gray-200'}
+  `;
 
-  const activeBtnStyle = { ...btnStyle, background: '#2563eb', border: '1px solid #2563eb', color: 'white' };
+  const actionBtnStyle = `
+    flex-1 py-4 text-xl font-serif font-bold border-2 border-ink 
+    bg-paper text-ink shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none active:bg-gray-200 transition-all
+  `;
 
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', background: '#000', overflow: 'hidden' }}>
+    <div className="w-screen h-screen flex flex-col bg-paper text-ink overflow-hidden border-4 border-ink">
       
-      <header style={{ padding: '12px 16px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10, background: '#0a0a0a' }}>
-        <div>
-          <h1 style={{ margin: 0, color: '#fff', fontSize: '1.2rem', letterSpacing: '-0.05em' }}>
-            MANIFOLD <span style={{ color: '#2563eb' }}>ENGINE</span>
-          </h1>
-          <div style={{ fontSize: '10px', color: '#666', marginTop: '2px', fontFamily: 'monospace' }}>
-            {currentPuzzleName}
+      <header className="border-b-4 border-ink bg-paper z-10 flex flex-col">
+        <div className="flex justify-between items-end px-6 py-4 border-b border-ink">
+          <div>
+            <h1 className="text-5xl font-serif font-black tracking-tight leading-none">
+              MANIFOLD ENGINE
+            </h1>
+            <div className="font-mono text-xs mt-2 text-graphite uppercase tracking-widest">
+             — Spatial Constraint Solver — {new Date().toLocaleDateString()}
+            </div>
+          </div>
+          
+          <div className="text-right">
+             <div className="font-serif font-bold text-lg italic border-b-2 border-ink inline-block mb-1">
+               {currentPuzzleName || "Loading..."}
+             </div>
+             <div className="font-mono text-xs flex items-center justify-end gap-2">
+                STATUS: 
+                <span className={`px-1 ${status === 'SOLVED' ? 'bg-ink text-paper' : ''}`}>
+                  {status}
+                </span>
+             </div>
           </div>
         </div>
-        
-        <div style={{ display: 'flex', gap: '4px' }}>
-            {(['GRID', 'TORUS', 'CUBE'] as VisualTopology[]).map(t => (
-                <button 
-                    key={t}
-                    onClick={() => setTopology(t)}
-                    style={visualTopology === t ? activeBtnStyle : btnStyle}
-                >
-                    {t}
-                </button>
-            ))}
-        </div>
 
-        <div style={{ fontSize: '10px', fontFamily: 'monospace', color: status === 'SOLVED' ? '#22c55e' : '#666' }}>
-             STATUS: {status}
-        </div>
+        <nav className="flex border-b border-ink">
+          {(['GRID', 'TORUS', 'CUBE'] as VisualTopology[]).map(t => (
+            <button 
+                key={t}
+                onClick={() => setTopology(t)}
+                className={navBtnStyle(visualTopology === t)}
+            >
+                {t}
+            </button>
+          ))}
+          <div className="flex-1 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNmOWY3ZjEiLz48Y2lyY2xlIGN4PSIyIiBjeT0iMiIgcj0iMSIgZmlsbD0iI2QxZDVRiIvPjwvc3ZnPg==')] opacity-20"></div>
+        </nav>
       </header>
 
-      <div style={{ flex: 1, position: 'relative', width: '100%', minHeight: 0 }}>
+      <div className="flex-1 relative bg-paper cursor-crosshair">
          <Scene3D />
          
          {stats && status === 'SOLVED' && (
-             <div style={{ 
-                 position: 'absolute', bottom: '20px', left: '20px', 
-                 background: 'rgba(0,0,0,0.8)', border: '1px solid #333', 
-                 padding: '15px', borderRadius: '8px', color: '#fff', 
-                 fontFamily: 'monospace', fontSize: '12px', pointerEvents: 'none',
-                 backdropFilter: 'blur(4px)'
-             }}>
-                 <div style={{ color: '#2563eb', fontWeight: 'bold', marginBottom: '8px' }}>RUST/WASM BENCHMARK</div>
-                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px 20px' }}>
-                     <span style={{ color: '#888' }}>Time:</span>
-                     <span style={{ color: '#4ade80' }}>{(stats.time / 1000).toFixed(2)} ms</span>
+             <div className="absolute top-6 right-6 border-2 border-ink bg-paper p-4 shadow-hard min-w-[240px]">
+                 <div className="border-b-2 border-ink pb-2 mb-3 font-serif font-bold text-lg">
+                   PERFORMANCE DATA
+                 </div>
+                 <div className="font-mono text-sm grid grid-cols-2 gap-y-2">
+                     <span className="text-graphite">Time:</span>
+                     <span className="text-right font-bold">{(stats.time / 1000).toFixed(2)} ms</span>
                      
-                     <span style={{ color: '#888' }}>Iterations:</span>
-                     <span>{stats.iterations.toLocaleString()}</span>
+                     <span className="text-graphite">Nodes:</span>
+                     <span className="text-right">{stats.iterations.toLocaleString()}</span>
                      
-                     <span style={{ color: '#888' }}>Backtracks:</span>
-                     <span style={{ color: stats.backtracks > 0 ? '#fbbf24' : '#fff' }}>{stats.backtracks.toLocaleString()}</span>
+                     <span className="text-graphite">Backtracks:</span>
+                     <span className="text-right text-red-ink">{stats.backtracks}</span>
                      
-                     <span style={{ color: '#888' }}>Max Depth:</span>
-                     <span>{stats.depth}</span>
-                     
-                     <span style={{ color: '#888' }}>Perf:</span>
-                     <span>{(stats.iterations / (stats.time / 1000)).toFixed(0)} ops/ms</span>
+                     <span className="text-graphite">Depth:</span>
+                     <span className="text-right">{stats.depth}</span>
                  </div>
              </div>
          )}
       </div>
 
-      <div style={{ padding: '16px', borderTop: '1px solid #333', background: '#0a0a0a', zIndex: 10, textAlign: 'center' }}>
-            <button onClick={loadRandomPuzzle} style={btnStyle}>RANDOM PUZZLE</button>
-            <button onClick={reset} style={{ ...btnStyle, color: '#ef4444', border: '1px solid #7f1d1d' }}>RESET</button>
-            <div style={{ display: 'inline-block', width: '20px' }}></div>
-            <button onClick={solve} style={{ ...btnStyle, color: '#2563eb', border: '1px solid #2563eb' }}>⚡ SOLVE</button>
-      </div>
+      <footer className="border-t-4 border-ink bg-paper p-6">
+        <div className="flex gap-4 max-w-4xl mx-auto">
+            <button onClick={loadRandomPuzzle} className={actionBtnStyle}>
+              RANDOM ISSUE
+            </button>
+            <button onClick={reset} className={`${actionBtnStyle} text-red-ink border-red-ink`}>
+              RESET
+            </button>
+            <button onClick={solve} className={`${actionBtnStyle}`}>
+              SOLVE PUZZLE
+            </button>
+        </div>
+      </footer>
     </div>
   );
 }

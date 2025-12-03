@@ -4,5 +4,16 @@
 
 body {
   margin: 0;
-  overflow: hidden; 
+  overflow: hidden;
+  background-color: #F9F7F1;
+}
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #F9F7F1; 
+  border-left: 1px solid #111;
+}
+::-webkit-scrollbar-thumb {
+  background: #111; 
 }
