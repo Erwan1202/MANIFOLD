@@ -116,6 +116,38 @@ impl ManifoldEngine {
         false
     }
 
+    pub fn export_state(&self) -> Vec<u8> {
+        let mut packed = Vec::with_capacity(243);
+        for i in (0..486).step_by(2) {
+            let high = self.cells[i] & 0x0F;
+            let low = if i + 1 < 486 { self.cells[i + 1] & 0x0F } else { 0 };
+            packed.push((high << 4) | low);
+        }
+        packed
+    }
+
+    pub fn import_state(&mut self, packed: Vec<u8>) -> bool {
+        if packed.len() != 243 {
+            return false;
+        }
+        for (i, &byte) in packed.iter().enumerate() {
+            let high = (byte >> 4) & 0x0F;
+            let low = byte & 0x0F;
+            let idx = i * 2;
+            if high > 9 || low > 9 {
+                return false;
+            }
+            self.cells[idx] = high;
+            self.fixed[idx] = high != 0;
+            if idx + 1 < 486 {
+                self.cells[idx + 1] = low;
+                self.fixed[idx + 1] = low != 0;
+            }
+        }
+        self.recompute_domains();
+        true
+    }
+
     pub fn solve(&mut self) -> SolveStats {
         self.iter_count = 0;
         self.backtrack_count = 0;
@@ -302,4 +334,154 @@ fn generate_sudoku_constraints(num_faces: usize) -> (Vec<u8>, Vec<Vec<usize>>) {
         }
     }
     (cells, constraints)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_classic_9x9_constraints_count() {
+        let (cells, constraints) = generate_classic_9x9();
+        assert_eq!(cells.len(), 81);
+        assert_eq!(constraints.len(), 81);
+        for constraint_list in &constraints {
+            assert!(constraint_list.len() >= 20);
+        }
+    }
+
+    #[test]
+    fn test_cube_topology_size() {
+        let (cells, constraints) = generate_cube_topology();
+        assert_eq!(cells.len(), 486);
+        assert_eq!(constraints.len(), 486);
+    }
+
+    #[test]
+    fn test_cube_edge_stitching() {
+        let (_, constraints) = generate_cube_topology();
+        let face0_right_edge: Vec<usize> = (0..9).map(|k| k * 9 + 8).collect();
+        let face2_left_edge: Vec<usize> = (0..9).map(|k| 2 * 81 + k * 9).collect();
+        for i in 0..9 {
+            let u = face0_right_edge[i];
+            let v = face2_left_edge[i];
+            assert!(constraints[u].contains(&v));
+            assert!(constraints[v].contains(&u));
+        }
+    }
+
+    #[test]
+    fn test_is_safe_empty_grid() {
+        let engine = ManifoldEngine::new(Topology::Classic9x9);
+        for i in 0..81 {
+            for v in 1..=9 {
+                assert!(engine.is_safe(i, v));
+            }
+        }
+    }
+
+    #[test]
+    fn test_is_safe_conflict() {
+        let mut engine = ManifoldEngine::new(Topology::Classic9x9);
+        engine.cells[0] = 5;
+        assert!(!engine.is_safe(1, 5));
+        assert!(!engine.is_safe(9, 5));
+        assert!(!engine.is_safe(10, 5));
+        assert!(engine.is_safe(30, 5));
+    }
+
+    #[test]
+    fn test_set_cell_valid() {
+        let mut engine = ManifoldEngine::new(Topology::Classic9x9);
+        assert!(engine.set_cell(0, 5));
+        assert_eq!(engine.cells[0], 5);
+    }
+
+    #[test]
+    fn test_set_cell_conflict() {
+        let mut engine = ManifoldEngine::new(Topology::Classic9x9);
+        engine.set_cell(0, 5);
+        assert!(!engine.set_cell(1, 5));
+        assert_eq!(engine.cells[1], 0);
+    }
+
+    #[test]
+    fn test_set_cell_fixed() {
+        let mut engine = ManifoldEngine::new(Topology::Classic9x9);
+        engine.fixed[0] = true;
+        engine.cells[0] = 5;
+        assert!(!engine.set_cell(0, 3));
+        assert_eq!(engine.cells[0], 5);
+    }
+
+    #[test]
+    fn test_reset() {
+        let mut engine = ManifoldEngine::new(Topology::Classic9x9);
+        engine.set_cell(0, 5);
+        engine.set_cell(20, 3);
+        engine.fixed[20] = true;
+        engine.reset();
+        assert_eq!(engine.cells[0], 0);
+        assert_eq!(engine.cells[20], 3);
+    }
+
+    #[test]
+    fn test_load_puzzle_81() {
+        let mut engine = ManifoldEngine::new(Topology::Cube6Faces);
+        let mut puzzle = vec![0u8; 81];
+        puzzle[0] = 5;
+        puzzle[10] = 3;
+        assert!(engine.load_puzzle(puzzle));
+        assert_eq!(engine.cells[0], 5);
+        assert!(engine.fixed[0]);
+        assert_eq!(engine.cells[10], 3);
+        assert!(engine.fixed[10]);
+        assert_eq!(engine.cells[81], 0);
+    }
+
+    #[test]
+    fn test_load_puzzle_486() {
+        let mut engine = ManifoldEngine::new(Topology::Cube6Faces);
+        let mut puzzle = vec![0u8; 486];
+        puzzle[100] = 7;
+        assert!(engine.load_puzzle(puzzle));
+        assert_eq!(engine.cells[100], 7);
+        assert!(engine.fixed[100]);
+    }
+
+    #[test]
+    fn test_load_puzzle_invalid_size() {
+        let mut engine = ManifoldEngine::new(Topology::Cube6Faces);
+        let puzzle = vec![0u8; 50];
+        assert!(!engine.load_puzzle(puzzle));
+    }
+
+    #[test]
+    fn test_domains_initial() {
+        let engine = ManifoldEngine::new(Topology::Classic9x9);
+        for i in 0..81 {
+            for v in 1..=9 {
+                assert!(engine.domains[i][v]);
+            }
+        }
+    }
+
+    #[test]
+    fn test_domains_after_set() {
+        let mut engine = ManifoldEngine::new(Topology::Classic9x9);
+        engine.set_cell(0, 5);
+        assert!(!engine.domains[1][5]);
+        assert!(!engine.domains[9][5]);
+        assert!(engine.domains[30][5]);
+    }
+
+    #[test]
+    fn test_constraint_symmetry() {
+        let (_, constraints) = generate_cube_topology();
+        for (i, neighbors) in constraints.iter().enumerate() {
+            for &j in neighbors {
+                assert!(constraints[j].contains(&i));
+            }
+        }
+    }
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Text, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -54,7 +54,7 @@ const Cell3D = ({ position, value, color, textColor }: any) => {
     <group position={position}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={[0.9, 0.9, 0.15]} />
-        <meshStandardMaterial 
+        <meshStandardMaterial
           color={color}
           side={THREE.FrontSide}
           depthWrite={true}
@@ -67,8 +67,6 @@ const Cell3D = ({ position, value, color, textColor }: any) => {
           color={textColor}
           anchorX="center"
           anchorY="middle"
-          depthTest={true}
-          depthWrite={false}
         >
           {String(safeValue)}
         </Text>
@@ -92,9 +90,9 @@ export const CubeSudoku = () => {
 
   const renderGridOnFace = (faceIndex: number) => {
     return (
-      <group 
-        key={`face-${faceIndex}`} 
-        position={cubeFaces[faceIndex].position as [number, number, number]} 
+      <group
+        key={`face-${faceIndex}`}
+        position={cubeFaces[faceIndex].position as [number, number, number]}
         rotation={cubeFaces[faceIndex].rotation as [number, number, number]}
       >
         {Array(9).fill(null).map((_, i) => {
@@ -133,7 +131,7 @@ export const CubeSudoku = () => {
   };
 
   return (
-    <Canvas 
+    <Canvas
       camera={{ position: [8, 8, 12], fov: 50 }}
       style={{ width: '100%', height: '100%' }}
     >
@@ -142,7 +140,7 @@ export const CubeSudoku = () => {
       <pointLight position={[-12, -12, -12]} intensity={0.4} />
 
       {[0, 1, 2, 3, 4, 5].map((faceIndex) => renderGridOnFace(faceIndex))}
-      
+
       <OrbitControls enableZoom={true} enablePan={true} />
     </Canvas>
   );
@@ -157,7 +155,7 @@ export const TorusSudoku = () => {
   const grid = useMemo(() => {
     const baseGrid = generateSudokuGrid();
     const extended: number[][] = [];
-    
+
     for (let i = 0; i < gridHeight; i++) {
       extended[i] = [];
       for (let j = 0; j < gridWidth; j++) {
@@ -187,13 +185,13 @@ export const TorusSudoku = () => {
   }, [grid]);
 
   return (
-    <Canvas 
+    <Canvas
       camera={{ position: [0, 0, 20], fov: 45 }}
       style={{ width: '100%', height: '100%' }}
     >
       <ambientLight intensity={0.6} />
       <pointLight position={[15, 15, 15]} intensity={1} />
-      
+
       {cells.map((cell, idx) => (
         <Cell3D
           key={idx}
@@ -203,7 +201,7 @@ export const TorusSudoku = () => {
           textColor="#60a5fa"
         />
       ))}
-      
+
       <OrbitControls enableZoom={true} enablePan={true} />
     </Canvas>
   );
@@ -234,13 +232,13 @@ export const SphereSudoku = () => {
   }, [grid]);
 
   return (
-    <Canvas 
+    <Canvas
       camera={{ position: [0, 0, 18], fov: 45 }}
       style={{ width: '100%', height: '100%' }}
     >
       <ambientLight intensity={0.6} />
       <pointLight position={[12, 12, 12]} intensity={1} />
-      
+
       {cells.map((cell, idx) => (
         <Cell3D
           key={idx}
@@ -250,7 +248,7 @@ export const SphereSudoku = () => {
           textColor="#a78bfa"
         />
       ))}
-      
+
       <OrbitControls enableZoom={true} enablePan={true} />
     </Canvas>
   );
@@ -272,13 +270,13 @@ export const OctahedronSudoku = () => {
   ], []);
 
   return (
-    <Canvas 
+    <Canvas
       camera={{ position: [12, 12, 12], fov: 45 }}
       style={{ width: '100%', height: '100%' }}
     >
       <ambientLight intensity={0.6} />
       <pointLight position={[12, 12, 12]} intensity={1} />
-      
+
       {octahedronFaces.map((face, faceIdx) => (
         <group key={`octaface-${faceIdx}`} position={face.pos as [number, number, number]}>
           {Array(9).fill(null).map((_, cellIdx) => {
@@ -298,7 +296,7 @@ export const OctahedronSudoku = () => {
           })}
         </group>
       ))}
-      
+
       <OrbitControls enableZoom={true} enablePan={true} />
     </Canvas>
   );
@@ -329,13 +327,13 @@ export const KleinBottleSudoku = () => {
   }, [grid]);
 
   return (
-    <Canvas 
+    <Canvas
       camera={{ position: [0, 0, 15], fov: 45 }}
       style={{ width: '100%', height: '100%' }}
     >
       <ambientLight intensity={0.6} />
       <pointLight position={[10, 10, 10]} intensity={1} />
-      
+
       {cells.map((cell, idx) => (
         <Cell3D
           key={idx}
@@ -345,7 +343,7 @@ export const KleinBottleSudoku = () => {
           textColor="#ec4899"
         />
       ))}
-      
+
       <OrbitControls enableZoom={true} enablePan={true} />
     </Canvas>
   );

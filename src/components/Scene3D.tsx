@@ -4,15 +4,12 @@ import { Text, OrbitControls, Center, Edges, AccumulativeShadows, RandomizedLigh
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 
-const TORUS_MAJOR_RADIUS = 12; 
+const TORUS_MAJOR_RADIUS = 12;
 const TORUS_MINOR_RADIUS = 2.85;
-
-const TORUS_CORE_MAJOR_RADIUS = 6.2;
-const TORUS_CORE_MINOR_RADIUS = 2.6;
 
 
 const TopologyCore = React.memo(({ type }: { type: string }) => {
-    const material = <meshBasicMaterial color="#FFFFFF" />; 
+    const material = <meshBasicMaterial color="#FFFFFF" />;
 
     if (type === 'CUBE') {
         return (
@@ -32,13 +29,66 @@ const TopologyCore = React.memo(({ type }: { type: string }) => {
 });
 
 
-const CellPlate = ({ position, rotation, value, isSelected, isError, onClick, size = [0.98, 0.98] }: any) => {
+const CellPlate = ({ position, rotation, value, isSelected, isError, isNew, onClick, size = [0.98, 0.98] }: any) => {
+    const groupRef = useRef<THREE.Group>(null);
+    const meshRef = useRef<THREE.Mesh>(null);
+    const scaleRef = useRef(1);
+    const shakeRef = useRef(0);
+    const pulseRef = useRef(0);
+    const revealRef = useRef(isNew ? 0 : 1);
+
+    useFrame((_, delta) => {
+        if (!groupRef.current) return;
+
+        if (isNew && revealRef.current < 1) {
+            revealRef.current = Math.min(1, revealRef.current + delta * 4);
+            groupRef.current.scale.setScalar(revealRef.current);
+        }
+
+        if (isError && shakeRef.current < 1) {
+            shakeRef.current += delta * 8;
+            const shake = Math.sin(shakeRef.current * Math.PI * 6) * 0.1 * (1 - shakeRef.current);
+            groupRef.current.position.x = position[0] + shake;
+        } else if (!isError && shakeRef.current > 0) {
+            shakeRef.current = 0;
+            groupRef.current.position.x = position[0];
+        }
+
+        if (isSelected) {
+            pulseRef.current += delta * 3;
+            const pulse = 1 + Math.sin(pulseRef.current) * 0.03;
+            scaleRef.current = THREE.MathUtils.lerp(scaleRef.current, pulse, 0.1);
+        } else {
+            pulseRef.current = 0;
+            scaleRef.current = THREE.MathUtils.lerp(scaleRef.current, 1, 0.15);
+        }
+
+        groupRef.current.scale.setScalar(scaleRef.current * (isNew ? revealRef.current : 1));
+    });
+
+    const baseColor = isError ? '#D93025' : (isSelected ? '#FEF08A' : '#FFFFFF');
+    const glowIntensity = isSelected ? 0.3 : 0;
+
     return (
-        <group position={position} rotation={rotation}>
-            <mesh onClick={(e) => { e.stopPropagation(); onClick(); }}>
+        <group ref={groupRef} position={position} rotation={rotation}>
+            {isSelected && (
+                <mesh position={[0, 0, -0.01]}>
+                    <planeGeometry args={[size[0] * 1.2, size[1] * 1.2]} />
+                    <meshBasicMaterial
+                        color="#FEF08A"
+                        transparent
+                        opacity={glowIntensity}
+                        side={THREE.DoubleSide}
+                    />
+                </mesh>
+            )}
+            <mesh
+                ref={meshRef}
+                onClick={(e) => { e.stopPropagation(); onClick(); }}
+            >
                 <planeGeometry args={size} />
-                <meshBasicMaterial 
-                    color={isError ? '#D93025' : (isSelected ? '#FEF08A' : '#FFFFFF')} 
+                <meshBasicMaterial
+                    color={baseColor}
                     side={THREE.DoubleSide}
                     polygonOffset={true}
                     polygonOffsetFactor={-1}
@@ -46,11 +96,11 @@ const CellPlate = ({ position, rotation, value, isSelected, isError, onClick, si
                 <Edges scale={1} threshold={15} color="#111111" linewidth={5} />
             </mesh>
             {value !== 0 && (
-                <Text 
-                    position={[0, 0, 0.02]} 
-                    fontSize={Math.min(size[0], size[1]) * 0.55} 
-                    color="#111111" 
-                    anchorX="center" 
+                <Text
+                    position={[0, 0, 0.02]}
+                    fontSize={Math.min(size[0], size[1]) * 0.55}
+                    color="#111111"
+                    anchorX="center"
                     anchorY="middle"
                     characters="0123456789"
                 >
@@ -133,126 +183,126 @@ const GridView = ({ grid, selectCell, selectedCell, errorCell }: any) => {
 };
 
 const TorusView = ({ grid, selectCell, selectedCell, errorCell }: any) => {
-  const cells = useMemo(() => {
-    const items: {
-      idx: number;
-      pos: [number, number, number];
-      rot: [number, number, number];
-      size: [number, number];
-    }[] = [];
+    const cells = useMemo(() => {
+        const items: {
+            idx: number;
+            pos: [number, number, number];
+            rot: [number, number, number];
+            size: [number, number];
+        }[] = [];
 
-    const rings = 54;       
-    const ringSize = 9;   
+        const rings = 54;
+        const ringSize = 9;
 
-    const R = TORUS_MAJOR_RADIUS;
-    const r = TORUS_MINOR_RADIUS;
+        const R = TORUS_MAJOR_RADIUS;
+        const r = TORUS_MINOR_RADIUS;
 
-    const tileWidth = 1.35;
-    const tileHeight = 1.95;
+        const tileWidth = 1.35;
+        const tileHeight = 1.95;
 
-    for (let i = 0; i < rings; i++) {
-      for (let j = 0; j < ringSize; j++) {
-        const globalIndex = i * ringSize + j;
-        if (globalIndex >= 486) continue;
+        for (let i = 0; i < rings; i++) {
+            for (let j = 0; j < ringSize; j++) {
+                const globalIndex = i * ringSize + j;
+                if (globalIndex >= 486) continue;
 
-        const u = ((i + 0.5) / rings) * Math.PI * 2;
-        const v = ((j + 0.5) / ringSize) * Math.PI * 2;
+                const u = ((i + 0.5) / rings) * Math.PI * 2;
+                const v = ((j + 0.5) / ringSize) * Math.PI * 2;
 
-        const cosV = Math.cos(v);
-        const sinV = Math.sin(v);
-        const cosU = Math.cos(u);
-        const sinU = Math.sin(u);
+                const cosV = Math.cos(v);
+                const sinV = Math.sin(v);
+                const cosU = Math.cos(u);
+                const sinU = Math.sin(u);
 
-        const radius = R + r * cosV;
+                const radius = R + r * cosV;
 
-        const x = radius * cosU;
-        const y = radius * sinU;
-        const z = r * sinV;
+                const x = radius * cosU;
+                const y = radius * sinU;
+                const z = r * sinV;
 
-        const posVec = new THREE.Vector3(x, y, z);
+                const posVec = new THREE.Vector3(x, y, z);
 
-        const centerVec = new THREE.Vector3(R * cosU, R * sinU, 0);
-        const normal = new THREE.Vector3().subVectors(posVec, centerVec).normalize();
+                const centerVec = new THREE.Vector3(R * cosU, R * sinU, 0);
+                const normal = new THREE.Vector3().subVectors(posVec, centerVec).normalize();
 
-        const tangentU = new THREE.Vector3(
-          -radius * sinU,
-          radius * cosU,
-          0
-        ).normalize();
+                const tangentU = new THREE.Vector3(
+                    -radius * sinU,
+                    radius * cosU,
+                    0
+                ).normalize();
 
 
-        const tangentV = new THREE.Vector3()
-          .crossVectors(normal, tangentU)
-          .normalize();
+                const tangentV = new THREE.Vector3()
+                    .crossVectors(normal, tangentU)
+                    .normalize();
 
-        const matrix = new THREE.Matrix4();
-        matrix.makeBasis(tangentU, tangentV, normal);
+                const matrix = new THREE.Matrix4();
+                matrix.makeBasis(tangentU, tangentV, normal);
 
-        const euler = new THREE.Euler().setFromRotationMatrix(matrix);
+                const euler = new THREE.Euler().setFromRotationMatrix(matrix);
 
-        items.push({
-          idx: globalIndex,
-          pos: [x, y, z],
-          rot: [euler.x, euler.y, euler.z],
-          size: [tileWidth, tileHeight],
-        });
-      }
-    }
+                items.push({
+                    idx: globalIndex,
+                    pos: [x, y, z],
+                    rot: [euler.x, euler.y, euler.z],
+                    size: [tileWidth, tileHeight],
+                });
+            }
+        }
 
-    return items;
-  }, []);
+        return items;
+    }, []);
 
-  return (
-    <group>
-      {cells.map((c) => (
-        <CellPlate
-          key={c.idx}
-          position={c.pos}
-          rotation={c.rot}
-          size={c.size}
-          value={grid[c.idx]}
-          isSelected={selectedCell === c.idx}
-          isError={errorCell === c.idx}
-          onClick={() => selectCell(c.idx)}
-        />
-      ))}
-    </group>
-  );
+    return (
+        <group>
+            {cells.map((c) => (
+                <CellPlate
+                    key={c.idx}
+                    position={c.pos}
+                    rotation={c.rot}
+                    size={c.size}
+                    value={grid[c.idx]}
+                    isSelected={selectedCell === c.idx}
+                    isError={errorCell === c.idx}
+                    onClick={() => selectCell(c.idx)}
+                />
+            ))}
+        </group>
+    );
 };
 
 
 export const Scene3D = () => {
-  const { grid, visualTopology, selectedCell, selectCell, errorCell } = useGameStore();
+    const { grid, visualTopology, selectedCell, selectCell, errorCell } = useGameStore();
 
-  return (
-    <div style={{ width: '100%', height: '100%' }}>
-      <Canvas dpr={[1, 2]} camera={{ position: [0, 0, 26], fov: 40 }}>
-        <color attach="background" args={['#ffffffff']} />
-        
-        <ambientLight intensity={1.5} />
-        <directionalLight position={[10, 20, 10]} intensity={1.2} />
-        <OrbitControls enablePan={true} />
-        
-        <Center>
-            {visualTopology !== 'GRID' && <TopologyCore type={visualTopology} />}
+    return (
+        <div style={{ width: '100%', height: '100%' }}>
+            <Canvas dpr={[1, 2]} camera={{ position: [0, 0, 26], fov: 40 }}>
+                <color attach="background" args={['#ffffffff']} />
 
-            {visualTopology === 'GRID' && (
-                <GridView grid={grid} selectCell={selectCell} selectedCell={selectedCell} errorCell={errorCell} />
-            )}
-            
-            {visualTopology === 'CUBE' && (
-                <CubeView grid={grid} selectCell={selectCell} selectedCell={selectedCell} errorCell={errorCell} />
-            )}
+                <ambientLight intensity={1.5} />
+                <directionalLight position={[10, 20, 10]} intensity={1.2} />
+                <OrbitControls enablePan={true} />
 
-            {visualTopology === 'TORUS' && (
-                <TorusView grid={grid} selectCell={selectCell} selectedCell={selectedCell} errorCell={errorCell} />
-            )}
-        </Center>
+                <Center>
+                    {visualTopology !== 'GRID' && <TopologyCore type={visualTopology} />}
 
-        <AccumulativeShadows temporal frames={120} color="#111111" colorBlend={2} toneMapped={true} alphaTest={0.7} opacity={0.3} scale={40} position={[0, -12, 0]}>
-          <RandomizedLight amount={8} radius={8} ambient={0.6} intensity={1} position={[10, 20, 5]} bias={0.001} />
-        </AccumulativeShadows>
-      </Canvas>
-    </div>
-  );
+                    {visualTopology === 'GRID' && (
+                        <GridView grid={grid} selectCell={selectCell} selectedCell={selectedCell} errorCell={errorCell} />
+                    )}
+
+                    {visualTopology === 'CUBE' && (
+                        <CubeView grid={grid} selectCell={selectCell} selectedCell={selectedCell} errorCell={errorCell} />
+                    )}
+
+                    {visualTopology === 'TORUS' && (
+                        <TorusView grid={grid} selectCell={selectCell} selectedCell={selectedCell} errorCell={errorCell} />
+                    )}
+                </Center>
+
+                <AccumulativeShadows temporal frames={120} color="#111111" colorBlend={2} toneMapped={true} alphaTest={0.7} opacity={0.3} scale={40} position={[0, -12, 0]}>
+                    <RandomizedLight amount={8} radius={8} ambient={0.6} intensity={1} position={[10, 20, 5]} bias={0.001} />
+                </AccumulativeShadows>
+            </Canvas>
+        </div>
+    );
 };
